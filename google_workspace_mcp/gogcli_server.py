@@ -846,21 +846,28 @@ def main_server_only(port: int = DEFAULT_PORT, detach: bool = False):
     print(f"📡 Server running on http://localhost:{port}/sse")
     print(f"📧 Using gogcli with account: {DEFAULT_ACCOUNT or 'default'}")
     print(f"🔧 HTML email support: FIXED (using --body-html with expect)")
-    print(f"\nPress Ctrl+C to stop\n")
 
     if detach:
         # Run in background (detached mode)
         import sys
-        print(f"✅ Server started in background mode (PID: {os.getpid()})")
-        print(f"📝 Logs: Check journalctl or process output")
+        print(f"\n✅ Server starting in background mode...")
         print(f"🛑 To stop: pkill -f 'google_workspace_mcp.server_gogcli'")
         sys.stdout.flush()
+        sys.stderr.flush()
+
         # Daemonize: fork twice
         if os.fork() > 0:
             os._exit(0)
         os.setsid()
         if os.fork() > 0:
             os._exit(0)
+
+        # Redirect stdin/stdout/stderr to /dev/null
+        sys.stdin.open(os.devnull)
+        sys.stdout.open(os.devnull, 'w')
+        sys.stderr.open(os.devnull, 'w')
+    else:
+        print(f"\nPress Ctrl+C to stop\n")
 
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
 

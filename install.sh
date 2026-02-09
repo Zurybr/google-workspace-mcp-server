@@ -112,13 +112,15 @@ start_server() {
     if [ "$detach" = "true" ]; then
         print_info "Server will run in background (detached) mode"
         echo ""
-        # Start the server in detached mode
-        python -m google_workspace_mcp.server_gogcli --server-only --port "$port" --detach
+        # Start the server in detached mode (direct execution)
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        python "$SCRIPT_DIR/google_workspace_mcp/gogcli_server.py" --server-only --port "$port" --detach
     else
         print_info "Press Ctrl+C to stop"
         echo ""
-        # Start the server normally
-        python -m google_workspace_mcp.server_gogcli --server-only --port "$port"
+        # Start the server normally (direct execution)
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        python "$SCRIPT_DIR/google_workspace_mcp/gogcli_server.py" --server-only --port "$port"
     fi
 }
 
