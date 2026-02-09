@@ -111,7 +111,7 @@ start_server() {
     echo ""
 
     # Start the server
-    python -m google_workspace_mcp.gogcli_server --server-only --port "$port"
+    python -m google_workspace_mcp.server_gogcli --server-only --port "$port"
 }
 
 # Main installation flow

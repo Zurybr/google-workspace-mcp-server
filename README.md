@@ -317,6 +317,31 @@ On macOS:
 brew install expect
 ```
 
+## Sending HTML Emails with gogcli
+
+**WORKING COMMAND** (tested - message_id: 19c442e0f85b9fc4):
+
+```bash
+expect << 'EOF'
+set timeout 30
+set html_body "<h1>Hello</h1><p>HTML <strong>email</strong></p><p style=color:blue>Blue text</p><a href=https://github.com>Link</a>"
+spawn gogcli gmail send --account=YOUR_EMAIL@gmail.com --to=recipient@example.com --subject=Subject --body=Plain --body-html=$html_body
+expect "Enter passphrase" { send "\r"; exp_continue }
+expect eof
+EOF
+```
+
+### CRITICAL Rules:
+- **NO quotes in attributes**: `style=color:blue` NOT `style="color: blue"`
+- **NO quotes in href**: `<a href=https://example.com>` NOT `<a href="https://example.com">`
+- **Single line HTML**: Newlines must be avoided
+- **Use single quotes**: `<< 'EOF'` to prevent shell expansion
+
+### Using the included script:
+```bash
+./send-html.sh "recipient@example.com" "Subject"
+```
+
 ## Development
 
 ```bash

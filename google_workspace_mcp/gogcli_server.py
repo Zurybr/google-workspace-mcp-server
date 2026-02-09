@@ -787,7 +787,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
 # MAIN ENTRY POINT
 # =============================================
 
-async def main_server_only(port: int = DEFAULT_PORT):
+def main_server_only(port: int = DEFAULT_PORT):
     """Run the server in SSE mode on specified port"""
     from mcp.server.sse import SseServerTransport
     import uvicorn
@@ -853,6 +853,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.server_only:
-        asyncio.run(main_server_only(args.port))
+        main_server_only(args.port)
     else:
         asyncio.run(main())

@@ -2,20 +2,20 @@
 Google Workspace MCP Server
 
 An MCP (Model Context Protocol) server that provides tools for interacting with
-Google Workspace services via Google Apps Script.
+Google Workspace services via gogcli CLI.
 
 Supported services:
-- Gmail: list, send, search, read emails
-- Sheets: read, write, create, append rows
-- Docs: create, read documents
-- Drive: list, create, share files and folders
-- Slides: create presentations
-- Maps: geocoding, distance, directions
-- Keep: create notes
+- Gmail: send, list, search, read, label, archive, delete emails (with HTML support)
+- Sheets: create, read, write, append, delete spreadsheets
+- Docs: create, read, append, delete documents
+- Slides: create, read, delete presentations
+- Calendar: create, list, update, delete events
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
-from google_workspace_mcp.server import GoogleWorkspaceMCPServer
+# Export main servers
+from google_workspace_mcp.gogcli_server import server as gogcli_server
+from google_workspace_mcp.server import server as oauth_server
 
-__all__ = ["GoogleWorkspaceMCPServer"]
+__all__ = ["gogcli_server", "oauth_server"]
