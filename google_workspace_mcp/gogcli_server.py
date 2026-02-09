@@ -612,18 +612,18 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
 
         elif name == "gmail_list_emails":
             limit = arguments.get("limit", 10)
-            result = run_gogcli("gmail", "list", ["--limit", str(limit)], account)
+            result = run_gogcli_with_expect("gmail", "list", ["--limit", str(limit)], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "gmail_search_emails":
             query = arguments["query"]
             limit = arguments.get("limit", 10)
-            result = run_gogcli("gmail", "search", ["--query", query, "--limit", str(limit)], account)
+            result = run_gogcli_with_expect("gmail", "search", ["--query", query, "--limit", str(limit)], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "gmail_read_email":
             msg_id = arguments["message_id"]
-            result = run_gogcli("gmail", "read", ["--id", msg_id], account)
+            result = run_gogcli_with_expect("gmail", "read", ["--id", msg_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "gmail_label_email":
@@ -632,34 +632,34 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             remove = arguments.get("remove", "")
 
             if labels:
-                result = run_gogcli("gmail", "label", ["--id", msg_id, "--add", labels], account)
+                result = run_gogcli_with_expect("gmail", "label", ["--id", msg_id, "--add", labels], account)
                 return [TextContent(type="text", text=result.get("output", result["error"]))]
             elif remove:
-                result = run_gogcli("gmail", "label", ["--id", msg_id, "--remove", remove], account)
+                result = run_gogcli_with_expect("gmail", "label", ["--id", msg_id, "--remove", remove], account)
                 return [TextContent(type="text", text=result.get("output", result["error"]))]
             else:
                 return [TextContent(type="text", text="Error: Must specify either 'labels' or 'remove'")]
 
         elif name == "gmail_archive_email":
             msg_id = arguments["message_id"]
-            result = run_gogcli("gmail", "archive", ["--id", msg_id], account)
+            result = run_gogcli_with_expect("gmail", "archive", ["--id", msg_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "gmail_delete_email":
             msg_id = arguments["message_id"]
-            result = run_gogcli("gmail", "delete", ["--id", msg_id], account)
+            result = run_gogcli_with_expect("gmail", "delete", ["--id", msg_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         # SHEETS TOOLS
         elif name == "sheets_create":
             title = arguments["title"]
-            result = run_gogcli("sheets", "create", ["--title", title], account)
+            result = run_gogcli_with_expect("sheets", "create", ["--title", title], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "sheets_read":
             sheet_id = arguments["spreadsheet_id"]
             range_val = arguments.get("range", "A1")
-            result = run_gogcli("sheets", "get", ["--id", sheet_id, "--range", range_val], account)
+            result = run_gogcli_with_expect("sheets", "get", ["--id", sheet_id, "--range", range_val], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "sheets_write":
@@ -677,7 +677,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             except:
                 pass  # Use as-is
 
-            result = run_gogcli("sheets", "update", ["--id", sheet_id, "--range", range_val, "--data", data], account)
+            result = run_gogcli_with_expect("sheets", "update", ["--id", sheet_id, "--range", range_val, "--data", data], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "sheets_append":
@@ -694,12 +694,12 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             except:
                 pass
 
-            result = run_gogcli("sheets", "append", ["--id", sheet_id, "--range", range_val, "--data", data], account)
+            result = run_gogcli_with_expect("sheets", "append", ["--id", sheet_id, "--range", range_val, "--data", data], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "sheets_delete":
             sheet_id = arguments["spreadsheet_id"]
-            result = run_gogcli("sheets", "delete", ["--id", sheet_id], account)
+            result = run_gogcli_with_expect("sheets", "delete", ["--id", sheet_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         # DOCS TOOLS
@@ -708,41 +708,41 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             content = arguments.get("content", "")
 
             if content:
-                result = run_gogcli("docs", "create", ["--title", title, "--content", content], account)
+                result = run_gogcli_with_expect("docs", "create", ["--title", title, "--content", content], account)
             else:
-                result = run_gogcli("docs", "create", ["--title", title], account)
+                result = run_gogcli_with_expect("docs", "create", ["--title", title], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "docs_read":
             doc_id = arguments["doc_id"]
-            result = run_gogcli("docs", "get", ["--id", doc_id], account)
+            result = run_gogcli_with_expect("docs", "get", ["--id", doc_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "docs_append":
             doc_id = arguments["doc_id"]
             text = arguments["text"]
-            result = run_gogcli("docs", "append", ["--id", doc_id, "--text", text], account)
+            result = run_gogcli_with_expect("docs", "append", ["--id", doc_id, "--text", text], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "docs_delete":
             doc_id = arguments["doc_id"]
-            result = run_gogcli("docs", "delete", ["--id", doc_id], account)
+            result = run_gogcli_with_expect("docs", "delete", ["--id", doc_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         # SLIDES TOOLS
         elif name == "slides_create":
             title = arguments["title"]
-            result = run_gogcli("slides", "create", ["--title", title], account)
+            result = run_gogcli_with_expect("slides", "create", ["--title", title], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "slides_read":
             pres_id = arguments["presentation_id"]
-            result = run_gogcli("slides", "get", ["--id", pres_id], account)
+            result = run_gogcli_with_expect("slides", "get", ["--id", pres_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "slides_delete":
             pres_id = arguments["presentation_id"]
-            result = run_gogcli("slides", "delete", ["--id", pres_id], account)
+            result = run_gogcli_with_expect("slides", "delete", ["--id", pres_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         # CALENDAR TOOLS
@@ -760,7 +760,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             if arguments.get("attendees"):
                 args.extend(["--attendees", arguments["attendees"]])
 
-            result = run_gogcli("calendar", "create", args, account)
+            result = run_gogcli_with_expect("calendar", "create", args, account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "calendar_list_events":
@@ -774,12 +774,12 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             if end:
                 args.extend(["--end", end])
 
-            result = run_gogcli("calendar", "list", args, account)
+            result = run_gogcli_with_expect("calendar", "list", args, account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "calendar_delete_event":
             event_id = arguments["event_id"]
-            result = run_gogcli("calendar", "delete", ["--id", event_id], account)
+            result = run_gogcli_with_expect("calendar", "delete", ["--id", event_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "calendar_update_event":
@@ -797,7 +797,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             if arguments.get("location"):
                 args.extend(["--location", arguments["location"]])
 
-            result = run_gogcli("calendar", "update", args, account)
+            result = run_gogcli_with_expect("calendar", "update", args, account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         else:
