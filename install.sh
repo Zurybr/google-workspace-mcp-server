@@ -75,6 +75,7 @@ check_gogcli() {
 # Start server in SSE mode
 start_server() {
     local port=${1:-9001}
+    local detach=${2:-false}
 
     print_header "Starting Google Workspace MCP Server"
     echo ""
@@ -107,18 +108,37 @@ start_server() {
     print_step "Starting server on port $port..."
     echo ""
     print_info "Server will be available at: http://localhost:$port/sse"
-    print_info "Press Ctrl+C to stop"
-    echo ""
 
-    # Start the server
-    python -m google_workspace_mcp.server_gogcli --server-only --port "$port"
+    if [ "$detach" = "true" ]; then
+        print_info "Server will run in background (detached) mode"
+        echo ""
+        # Start the server in detached mode
+        python -m google_workspace_mcp.server_gogcli --server-only --port "$port" --detach
+    else
+        print_info "Press Ctrl+C to stop"
+        echo ""
+        # Start the server normally
+        python -m google_workspace_mcp.server_gogcli --server-only --port "$port"
+    fi
 }
 
 # Main installation flow
 main() {
     # Check for --server-only flag
     if [[ "$1" == "--server-only" ]]; then
-        start_server "${2:-9001}"
+        DETACH=false
+        PORT="${2:-9001}"
+
+        # Check for --detach flag
+        if [[ "$2" == "--detach" ]] || [[ "$3" == "--detach" ]]; then
+            DETACH=true
+            # If --detach is second arg, port is default
+            if [[ "$2" == "--detach" ]]; then
+                PORT="9001"
+            fi
+        fi
+
+        start_server "$PORT" "$DETACH"
         exit 0
     fi
 
@@ -127,9 +147,15 @@ main() {
         echo "Google Workspace MCP Server - Installer"
         echo ""
         echo "Usage:"
-        echo "  ./install.sh              - Interactive installation"
-        echo "  ./install.sh --server-only [PORT]  - Start MCP server (default port: 9001)"
-        echo "  ./install.sh --help       - Show this help"
+        echo "  ./install.sh                           - Interactive installation"
+        echo "  ./install.sh --server-only [PORT]      - Start MCP server (default port: 9001)"
+        echo "  ./install.sh --server-only --detach    - Start MCP server in background"
+        echo "  ./install.sh --help                    - Show this help"
+        echo ""
+        echo "Examples:"
+        echo "  ./install.sh --server-only           - Start on port 9001 (foreground)"
+        echo "  ./install.sh --server-only 8080      - Start on port 8080"
+        echo "  ./install.sh --server-only --detach  - Start on port 9001 (background)"
         echo ""
         exit 0
     fi

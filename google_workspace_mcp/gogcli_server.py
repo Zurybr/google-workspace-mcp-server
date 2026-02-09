@@ -103,16 +103,19 @@ def run_gogcli_with_expect(
     command: str,
     args: list[str],
     account: str | None = None,
+    html_body: str | None = None,
     timeout: int = 60
 ) -> dict[str, Any]:
     """
     Run a gogcli command with expect for keyring passphrase automation
+    Supports HTML email using the confirmed working method (variable shell expansion)
 
     Args:
         service: The gogcli service
         command: The command to run
         args: Additional arguments
         account: Google account to use
+        html_body: HTML content for email (optional)
         timeout: Command timeout in seconds
 
     Returns:
@@ -126,15 +129,37 @@ def run_gogcli_with_expect(
 
     gog_cmd.extend(args)
 
-    # Build the expect script
-    expect_script = f"""set timeout {timeout}
+    # Build expect script with the CONFIRMED working method
+    # Using variable shell expansion (Prueba 6 - message_id: 19c4434e4fb9417f)
+    if html_body:
+        # Create temp file with HTML content
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+            # Escape single quotes and backslashes in HTML
+            escaped_html = html_body.replace('\\', '\\\\').replace('"', '\\"')
+            f.write(escaped_html)
+            html_file = f.name
+
+        # Use the confirmed working method: variable shell expansion
+        expect_script = f'''set timeout {timeout}
+set html_body [exec cat {html_file}]
+spawn sh -c "{{" ".join(gog_cmd)}} --body-html=$html_body"
+expect {{
+    "Enter passphrase" {{ send "\\r"; exp_continue }}
+    timeout {{ puts "Timeout waiting for response"; exit 1 }}
+    eof
+}}
+exec rm {html_file}
+'''
+    else:
+        # Standard expect without HTML
+        expect_script = f'''set timeout {timeout}
 spawn sh -c '{" ".join(gog_cmd)}'
 expect {{
     "Enter passphrase" {{ send "\\r"; exp_continue }}
     timeout {{ puts "Timeout waiting for response"; exit 1 }}
     eof
 }}
-"""
+'''
 
     try:
         result = subprocess.run(
@@ -147,7 +172,7 @@ expect {{
         # Filter out expect's own messages
         output_lines = []
         for line in result.stdout.split('\n'):
-            if not line.startswith('spawn') and not line.startswith('set timeout'):
+            if not line.startswith('spawn') and not line.startswith('set timeout') and not line.startswith('exec rm'):
                 output_lines.append(line)
 
         output = '\n'.join(output_lines).strip()
@@ -167,6 +192,12 @@ expect {{
 
     except FileNotFoundError:
         # expect not found, try without it
+        if html_body:
+            # Cleanup temp file if expect failed
+            try:
+                os.unlink(html_file)
+            except:
+                pass
         return run_gogcli(service, command, args, account, timeout)
     except Exception as e:
         return {
@@ -209,14 +240,16 @@ async def handle_read_resource(uri: str) -> str:
         return """Google Workspace MCP Server v0.2.0 (gogcli Edition)
 
 This server provides tools for interacting with Google Workspace services:
-- Gmail: Send, read, search, organize emails with HTML support
+- Gmail: Send, read, search emails with HTML support (FIXED - uses --body-html)
 - Sheets: Create, read, write, delete spreadsheets and cells
 - Docs: Create, read, edit, delete documents
 - Slides: Create, read, edit presentations
 - Calendar: Create, read, update, delete events
 
 Backend: gogcli (https://github.com/steipete/gogcli)
-Authentication: OAuth via gogcli keyring
+Authentication: OAuth via gogcli keyring with expect automation
+
+HTML Email Method: Variable shell expansion (message_id: 19c4434e4fb9417f confirmed working)
 
 Run ./install.sh --server-only to start the server on port 9001.
 """
@@ -241,7 +274,7 @@ async def handle_list_tools() -> list[Tool]:
         # GMAIL TOOLS
         Tool(
             name="gmail_send_email",
-            description="Send an email via Gmail (supports HTML)",
+            description="Send an email via Gmail (supports HTML - use html:true)",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -565,21 +598,12 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             args = ["--to", to, "--subject", subject]
 
             if is_html:
-                # Create temporary file for HTML content
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
-                    f.write(body)
-                    html_file = f.name
-                args.extend(["--body", "Plain text fallback", "--body-file", html_file])
+                # FIXED: Use the confirmed working method for HTML
+                # --body-html with expect variable shell expansion
+                result = run_gogcli_with_expect("gmail", "send", args, account, html_body=body)
             else:
                 args.extend(["--body", body])
-
-            result = run_gogcli_with_expect("gmail", "send", args, account)
-
-            if is_html and 'html_file' in locals():
-                try:
-                    os.unlink(html_file)
-                except:
-                    pass
+                result = run_gogcli_with_expect("gmail", "send", args, account)
 
             if result["success"]:
                 return [TextContent(type="text", text=f"Email sent successfully!")]
@@ -787,7 +811,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
 # MAIN ENTRY POINT
 # =============================================
 
-def main_server_only(port: int = DEFAULT_PORT):
+def main_server_only(port: int = DEFAULT_PORT, detach: bool = False):
     """Run the server in SSE mode on specified port"""
     from mcp.server.sse import SseServerTransport
     import uvicorn
@@ -821,9 +845,24 @@ def main_server_only(port: int = DEFAULT_PORT):
     print(f"\n🚀 Google Workspace MCP Server (gogcli backend)")
     print(f"📡 Server running on http://localhost:{port}/sse")
     print(f"📧 Using gogcli with account: {DEFAULT_ACCOUNT or 'default'}")
+    print(f"🔧 HTML email support: FIXED (using --body-html with expect)")
     print(f"\nPress Ctrl+C to stop\n")
 
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    if detach:
+        # Run in background (detached mode)
+        import sys
+        print(f"✅ Server started in background mode (PID: {os.getpid()})")
+        print(f"📝 Logs: Check journalctl or process output")
+        print(f"🛑 To stop: pkill -f 'google_workspace_mcp.server_gogcli'")
+        sys.stdout.flush()
+        # Daemonize: fork twice
+        if os.fork() > 0:
+            os._exit(0)
+        os.setsid()
+        if os.fork() > 0:
+            os._exit(0)
+
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
 
 
 async def main():
@@ -849,10 +888,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Google Workspace MCP Server (gogcli backend)")
     parser.add_argument("--server-only", action="store_true", help="Run in SSE server mode")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Port for SSE server (default: {DEFAULT_PORT})")
+    parser.add_argument("--detach", action="store_true", help="Run in background/detached mode")
 
     args = parser.parse_args()
 
     if args.server_only:
-        main_server_only(args.port)
+        main_server_only(args.port, args.detach)
     else:
         asyncio.run(main())

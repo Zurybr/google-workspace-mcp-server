@@ -35,17 +35,36 @@ For `--manual` mode, follow the URL prompt and paste the authorization code when
 ### 3. Start the MCP Server
 
 ```bash
-chmod +x install.sh
+# Start on default port (9001) - foreground mode
 ./install.sh --server-only
+
+# Start in background/detached mode
+./install.sh --server-only --detach
+
+# Start on custom port
+./install.sh --server-only 8080
+
+# Show help
+./install.sh --help
 ```
-
-The server will start on **http://localhost:9001/sse**
-
-Press Ctrl+C to stop.
 
 ## Usage
 
 ### Starting the Server
+
+```bash
+# Foreground mode (default)
+./install.sh --server-only
+
+# Background/detached mode
+./install.sh --server-only --detach
+
+# Custom port
+./install.sh --server-only 8080
+
+# Stop background server
+pkill -f 'google_workspace_mcp.server_gogcli'
+```
 
 ```bash
 # Start on default port (9001)
@@ -77,7 +96,7 @@ This will:
 
 | Tool | Description |
 |------|-------------|
-| `gmail_send_email` | Send an email (supports HTML via `--html:true`) |
+| `gmail_send_email` | Send an email (supports HTML via `html:true` - FIXED using `--body-html`) |
 | `gmail_list_emails` | List recent emails |
 | `gmail_search_emails` | Search emails with query |
 | `gmail_read_email` | Read a full email by ID |
