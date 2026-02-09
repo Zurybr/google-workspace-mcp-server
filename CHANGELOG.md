@@ -1,5 +1,14 @@
 # Changelog - Google Workspace MCP Server
 
+## [0.2.2] - 2026-02-09
+
+### Fixed - Keyring Passphrase Automation (Critical)
+- **Problem**: All gogcli commands except gmail_send_email were failing with "no TTY available"
+- **Root Cause**: Only gmail_send_email used `run_gogcli_with_expect()`, all others used `run_gogcli()`
+- **Solution**: Changed ALL commands to use `run_gogcli_with_expect()` for keyring automation
+- **Services Fixed**: Gmail (list, search, read, label, archive, delete), Sheets, Docs, Slides, Calendar
+- **Result**: All commands now properly handle empty passphrase via expect
+
 ## [0.2.1] - 2026-02-09
 
 ### Fixed - HTML Email Support (Critical)
