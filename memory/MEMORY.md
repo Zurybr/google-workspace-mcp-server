@@ -28,3 +28,31 @@ ps aux | grep gogcli_server
 - 25 tools MCP disponibles
 - gogcli autenticado
 - Health endpoint funciona
+
+---
+
+## FastMCP vs MCP Puro (Feb 2026)
+
+### FastMCP - RECOMENDADO para nuevos servidores
+```python
+from fastmcp import FastMCP
+
+mcp = FastMCP("nombre")
+
+@mcp.tool()
+def mi_tool(param: str, limit: int = 5) -> str:
+    """Descripción automática desde docstring."""
+    return "resultado"
+
+mcp.run(transport="sse", host="0.0.0.0", port=9001)
+```
+
+### Patrones de Egregore
+- **Singleton**: `fcntl.flock(LOCK_EX | LOCK_NB)` para evitar múltiples instancias
+- **Logging**: `FileHandler + StreamHandler` con formato estructurado
+- **Signals**: `signal.signal(SIGTERM, handler)` para shutdown limpio
+- **Returns**: `json.dumps(result, indent=2, default=str)` para consistencia
+
+### Cuando usar cada uno
+- **FastMCP**: Default - simple, menos bugs, type hints automáticos
+- **MCP puro**: Solo cuando necesitas control total o mínimas dependencias
