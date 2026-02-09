@@ -294,11 +294,18 @@ gogcli calendar delete --id=EVENT_ID
 
 ## Troubleshooting
 
-### "gogcli not found"
+### Server won't start on port 9001
 
-Install gogcli from releases:
+Kill process using the port:
 ```bash
-bash legacy-extras/install-gogcli.sh
+# Using the kill-port script
+./kill-port.sh 9001
+
+# Or manually
+lsof -ti :9001 | xargs kill -9
+
+# Then start again
+./install.sh --server-only
 ```
 
 ### "Authentication required"
