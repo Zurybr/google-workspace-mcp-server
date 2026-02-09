@@ -222,6 +222,7 @@ main() {
     echo ""
     print_info "⚠️  Make sure gogcli is authenticated before using tools!"
     print_info "   Run: gogcli auth login"
+    print_info "   Or for servers: gogcli auth login --manual"
     echo ""
 }
 

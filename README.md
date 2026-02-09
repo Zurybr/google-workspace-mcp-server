@@ -23,10 +23,14 @@ Or download from [gogcli releases](https://github.com/steipete/gogcli/releases).
 ### 2. Authenticate gogcli
 
 ```bash
+# Interactive authentication (opens browser)
 gogcli auth login
+
+# Manual authentication (for servers/CLI without browser)
+gogcli auth login --manual
 ```
 
-Follow the browser prompt to authenticate with your Google account.
+For `--manual` mode, follow the URL prompt and paste the authorization code when prompted.
 
 ### 3. Start the MCP Server
 
@@ -282,7 +286,11 @@ bash legacy-extras/install-gogcli.sh
 
 Run gogcli auth:
 ```bash
+# Interactive mode (opens browser)
 gogcli auth login
+
+# Manual mode (for servers without browser)
+gogcli auth login --manual
 ```
 
 ### Server won't start on port 9001
