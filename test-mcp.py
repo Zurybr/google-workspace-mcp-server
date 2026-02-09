@@ -4,12 +4,9 @@ Test script for Google Workspace MCP Server
 Tests MCP connection and basic operations
 """
 
-import asyncio
-import json
-import httpx
 import sys
 
-async def test_mcp_connection():
+def test_mcp_connection():
     """Test MCP SSE connection and basic operations"""
 
     print("Testing Google Workspace MCP Server...")
@@ -18,36 +15,37 @@ async def test_mcp_connection():
     # Test 1: SSE Endpoint
     print("\n1. Testing SSE endpoint...")
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get("http://localhost:9001/sse", timeout=5.0)
-            if response.status_code == 200:
-                print("   ✅ SSE endpoint: OK (200)")
-                content = response.text
-                if "event: endpoint" in content:
-                    print("   ✅ SSE event format: OK")
-                    # Extract session ID
-                    for line in content.split('\n'):
-                        if line.startswith('data:'):
-                            messages_url = line.split('data: ')[1]
-                            print(f"   ✅ Messages endpoint: {messages_url}")
-                            break
-                else:
-                    print("   ❌ SSE event format: FAILED")
-                    return False
+        import requests
+        response = requests.get("http://127.0.0.1:9001/sse", timeout=5)
+        print(f"   Status: {response.status_code}")
+        if response.status_code == 200:
+            print("   ✅ SSE endpoint: OK (200)")
+            content = response.text
+            if "event: endpoint" in content:
+                print("   ✅ SSE event format: OK")
+                # Extract session ID
+                for line in content.split('\n'):
+                    if line.startswith('data:'):
+                        messages_url = line.split('data: ')[1]
+                        print(f"   ✅ Messages endpoint: {messages_url}")
+                        break
             else:
-                print(f"   ❌ SSE endpoint: FAILED ({response.status_code})")
+                print("   ❌ SSE event format: FAILED")
                 return False
+        else:
+            print(f"   ❌ SSE endpoint: FAILED ({response.status_code})")
+            return False
     except Exception as e:
+        import traceback
         print(f"   ❌ SSE connection: FAILED ({e})")
+        print(f"   Traceback: {traceback.format_exc()}")
         return False
 
     # Test 2: Health check
     print("\n2. Testing server health...")
     try:
-        async with httpx.AsyncClient() as client:
-            # The root path should return 404 or redirect, that's ok
-            response = await client.get("http://localhost:9001/", timeout=5.0)
-            print(f"   ℹ️  Root endpoint: {response.status_code}")
+        response = requests.get("http://localhost:9001/", timeout=5)
+        print(f"   ℹ️  Root endpoint: {response.status_code}")
     except Exception as e:
         print(f"   ⚠️  Root endpoint check: {e}")
 
@@ -65,7 +63,7 @@ async def test_mcp_connection():
 
 if __name__ == "__main__":
     try:
-        result = asyncio.run(test_mcp_connection())
+        result = test_mcp_connection()
         sys.exit(0 if result else 1)
     except KeyboardInterrupt:
         print("\n\nTest interrupted")

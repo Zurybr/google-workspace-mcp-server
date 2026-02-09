@@ -271,6 +271,23 @@ Run ./install.sh --server-only to start the server on port 9001.
 async def handle_list_tools() -> list[Tool]:
     """List available tools"""
     return [
+        # SYSTEM/STATUS TOOLS
+        Tool(
+            name="gogcli_status",
+            description="Check gogcli authentication status and configuration",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+            },
+        ),
+        Tool(
+            name="gogcli_version",
+            description="Get gogcli version information",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+            },
+        ),
         # GMAIL TOOLS
         Tool(
             name="gmail_send_email",
@@ -588,8 +605,47 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
     account = arguments.get("account", None)
 
     try:
+        # SYSTEM/STATUS TOOLS
+        if name == "gogcli_status":
+            # Check gogcli authentication status
+            auth_result = subprocess.run(
+                [GOGCLI_BIN, "auth", "status"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            # Get config info
+            config_result = subprocess.run(
+                [GOGCLI_BIN, "config", "show"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            status_info = {
+                "gogcli_bin": GOGCLI_BIN,
+                "default_account": DEFAULT_ACCOUNT or "not set",
+                "auth_status": "authenticated" if auth_result.returncode == 0 else "not authenticated",
+                "auth_output": auth_result.stdout.strip() if auth_result.returncode == 0 else auth_result.stderr.strip(),
+                "config": config_result.stdout.strip() if config_result.returncode == 0 else "config not available"
+            }
+            return [TextContent(type="text", text=json.dumps(status_info, indent=2))]
+
+        elif name == "gogcli_version":
+            result = subprocess.run(
+                [GOGCLI_BIN, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                return [TextContent(type="text", text=result.stdout.strip())]
+            else:
+                return [TextContent(type="text", text=f"Error getting version: {result.stderr}")]
+
         # GMAIL TOOLS
-        if name == "gmail_send_email":
+        elif name == "gmail_send_email":
             to = arguments["to"]
             subject = arguments["subject"]
             body = arguments["body"]
@@ -816,41 +872,89 @@ def main_server_only(port: int = DEFAULT_PORT, detach: bool = False):
     from mcp.server.sse import SseServerTransport
     import uvicorn
 
-    # Create SSE app
+    # Create SSE transport
     sse_transport = SseServerTransport("/messages")
 
-    async def handle_sse(request):
-        async with sse_transport.connect_sse(request.scope, request.receive, request._send) as streams:
-            await server.run(
-                streams[0],
-                streams[1],
-                InitializationOptions(
-                    server_name="google-workspace-gogcli-server",
-                    server_version="0.2.0",
-                    capabilities=server.get_capabilities(
-                        notification_options=NotificationOptions(),
-                        experimental_capabilities={},
-                    ),
-                ),
-            )
+    # ASGI app that handles both SSE and POST endpoints
+    async def app(scope, receive, send):
+        if scope["type"] == "http":
+            path = scope["path"]
 
-    # Create ASGI app
+            if path == "/health":
+                # Health check endpoint
+                from starlette.responses import JSONResponse
+
+                # Check gogcli availability
+                try:
+                    result = subprocess.run(
+                        [GOGCLI_BIN, "auth", "status"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    gogcli_ok = result.returncode == 0
+                    auth_status = "authenticated" if gogcli_ok else "not_authenticated"
+                except:
+                    gogcli_ok = False
+                    auth_status = "error"
+
+                response = JSONResponse({
+                    "status": "ok",
+                    "server": "google-workspace-gogcli-server",
+                    "version": "0.2.0",
+                    "gogcli": "ok" if gogcli_ok else "error",
+                    "auth": auth_status,
+                    "account": DEFAULT_ACCOUNT or "default"
+                })
+                await response(scope, receive, send)
+
+            elif path == "/sse":
+                # SSE endpoint - handle MCP connection
+                async with sse_transport.connect_sse(scope, receive, send) as streams:
+                    await server.run(
+                        streams[0],
+                        streams[1],
+                        InitializationOptions(
+                            server_name="google-workspace-gogcli-server",
+                            server_version="0.2.0",
+                            capabilities=server.get_capabilities(
+                                notification_options=NotificationOptions(),
+                                experimental_capabilities={},
+                            ),
+                        ),
+                    )
+
+            elif path == "/messages" and scope["method"] == "POST":
+                # POST endpoint for SSE messages
+                await sse_transport.handle_post_message(scope, receive, send)
+
+            else:
+                # 404
+                from starlette.responses import Response
+                response = Response("Not Found", status_code=404)
+                await response(scope, receive, send)
+
+    # Wrap app with CORS middleware using Starlette
     from starlette.applications import Starlette
-    from starlette.routing import Route
     from starlette.middleware.cors import CORSMiddleware
+    from starlette.routing import Mount
 
-    app = Starlette(routes=[
-        Route("/sse", endpoint=handle_sse),
+    # Create a wrapper Starlette app with CORS
+    starlette_app = Starlette(routes=[
+        Mount("/", app=app)
     ])
 
     # Add CORS middleware
-    app.add_middleware(
+    starlette_app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Use the wrapped app
+    app = starlette_app
 
     print(f"\n🚀 Google Workspace MCP Server (gogcli backend)")
     print(f"📡 Server running on http://localhost:{port}/sse")
