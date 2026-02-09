@@ -837,10 +837,20 @@ def main_server_only(port: int = DEFAULT_PORT, detach: bool = False):
     # Create ASGI app
     from starlette.applications import Starlette
     from starlette.routing import Route
+    from starlette.middleware.cors import CORSMiddleware
 
     app = Starlette(routes=[
         Route("/sse", endpoint=handle_sse),
     ])
+
+    # Add CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     print(f"\n🚀 Google Workspace MCP Server (gogcli backend)")
     print(f"📡 Server running on http://localhost:{port}/sse")
