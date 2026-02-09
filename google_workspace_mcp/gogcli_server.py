@@ -863,9 +863,9 @@ def main_server_only(port: int = DEFAULT_PORT, detach: bool = False):
             os._exit(0)
 
         # Redirect stdin/stdout/stderr to /dev/null
-        sys.stdin.open(os.devnull)
-        sys.stdout.open(os.devnull, 'w')
-        sys.stderr.open(os.devnull, 'w')
+        sys.stdin = open(os.devnull, 'r')
+        sys.stdout = open(os.devnull, 'w')
+        sys.stderr = open(os.devnull, 'w')
     else:
         print(f"\nPress Ctrl+C to stop\n")
 
