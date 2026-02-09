@@ -1,131 +1,71 @@
 # Google Workspace MCP Server
 
-A Model Context Protocol (MCP) server that provides AI agents with access to Google Workspace services including Gmail, Sheets, Docs, Drive, and Slides using direct Google APIs with OAuth 2.0 authentication.
+A Model Context Protocol (MCP) server that provides AI agents with access to Google Workspace services including Gmail, Sheets, Docs, Slides, and Calendar using **gogcli** as the backend.
 
 ## Features
 
-- **Gmail**: List, send, search, and read emails
-- **Sheets**: Create, read, write, and append rows to spreadsheets
-- **Docs**: Create and read Google Docs documents
-- **Drive**: List files, create files, and share resources
-- **Slides**: Create presentations
+- **Gmail**: Send, read, search, organize emails with HTML support
+- **Sheets**: Create, read, write, delete spreadsheets and cells
+- **Docs**: Create, read, edit, delete documents
+- **Slides**: Create, read, delete presentations
+- **Calendar**: Create, read, update, delete events
 
-## Quick Start (Automatic Installation)
+## Quick Start
 
-The easiest way to set up the server is using the interactive installer:
+### 1. Install gogcli
+
+```bash
+bash legacy-extras/install-gogcli.sh
+```
+
+Or download from [gogcli releases](https://github.com/steipete/gogcli/releases).
+
+### 2. Authenticate gogcli
+
+```bash
+gogcli auth login
+```
+
+Follow the browser prompt to authenticate with your Google account.
+
+### 3. Start the MCP Server
 
 ```bash
 chmod +x install.sh
-./install.sh
+./install.sh --server-only
 ```
 
-The installer will guide you through:
-1. Creating OAuth credentials in Google Cloud Console
-2. Enabling required Google APIs
-3. Installing dependencies
-4. Configuring the server
+The server will start on **http://localhost:9001/sse**
 
-## Manual Installation
-
-If you prefer to set up manually:
-
-### 1. Create OAuth Credentials
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials/oauthclient?project=agents-ai-demo)
-2. Sign in with your Google account
-3. Click **Create credentials** → **OAuth client ID**
-4. Application type: **Desktop application**
-5. Name: Enter `MCP Server`
-6. Click **Create**
-7. Copy the **Client ID** and **Client Secret**
-
-### 2. Enable Google APIs
-
-Enable the following APIs in [Google Cloud Console](https://console.cloud.google.com/apis/library):
-
-- [Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com?project=agents-ai-demo)
-- [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com?project=agents-ai-demo)
-- [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com?project=agents-ai-demo)
-- [Google Docs API](https://console.cloud.google.com/apis-library/docs.googleapis.com?project=agents-ai-demo)
-- [Google Slides API](https://console.cloud.google.com/apis/library/slides.googleapis.com?project=agents-ai-demo)
-
-### 3. Install the Server
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/google-workspace-mcp-server.git
-cd google-workspace-mcp-server
-
-# Install UV (if not already installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Create virtual environment and install dependencies
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv pip install -e .
-```
-
-### 4. Configure Environment Variables
-
-Create a `.env` file:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and add your credentials:
-
-```env
-GOOGLE_OAUTH_CLIENT_ID="your-client-id"
-GOOGLE_OAUTH_CLIENT_SECRET="your-client-secret"
-USER_GOOGLE_EMAIL="your.email@gmail.com"
-OAUTHLIB_INSECURE_TRANSPORT=1
-```
+Press Ctrl+C to stop.
 
 ## Usage
 
-### First-Time Authentication
-
-The first time you use a tool, you'll be prompted to authenticate in your browser:
-
-1. The server will open a browser window
-2. Sign in with your Google account
-3. Grant permissions to the requested services
-4. The server will save your authentication token
-
-### Running the Server
+### Starting the Server
 
 ```bash
-# Activate virtual environment
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+# Start on default port (9001)
+./install.sh --server-only
 
-# Run the server
-python -m google_workspace_mcp.server
+# Start on custom port
+./install.sh --server-only 8080
+
+# Show help
+./install.sh --help
 ```
 
-### Configuring Claude Desktop
+### Interactive Installation
 
-Add to your Claude Desktop config (`claude_desktop_config.json`):
+For first-time setup, run without arguments:
 
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "google-workspace": {
-      "command": "/path/to/google-workspace-mcp-server/.venv/bin/python",
-      "args": ["-m", "google_workspace_mcp.server"],
-      "env": {
-        "GOOGLE_OAUTH_CLIENT_ID": "your-client-id",
-        "GOOGLE_OAUTH_CLIENT_SECRET": "your-secret",
-        "USER_GOOGLE_EMAIL": "your.email@gmail.com",
-        "OAUTHLIB_INSECURE_TRANSPORT": "1"
-      }
-    }
-  }
-}
+```bash
+./install.sh
 ```
+
+This will:
+1. Check gogcli installation
+2. Install Python dependencies
+3. Create `.env` configuration file
 
 ## Available Tools
 
@@ -133,19 +73,23 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
 
 | Tool | Description |
 |------|-------------|
+| `gmail_send_email` | Send an email (supports HTML via `--html:true`) |
 | `gmail_list_emails` | List recent emails |
-| `gmail_send_email` | Send an email |
-| `gmail_search_emails` | Search emails |
-| `gmail_read_email` | Read a full email |
+| `gmail_search_emails` | Search emails with query |
+| `gmail_read_email` | Read a full email by ID |
+| `gmail_label_email` | Add/remove labels from email |
+| `gmail_archive_email` | Archive an email |
+| `gmail_delete_email` | Delete an email |
 
 ### Sheets
 
 | Tool | Description |
 |------|-------------|
 | `sheets_create` | Create a new spreadsheet |
-| `sheets_read` | Read data from a spreadsheet |
-| `sheets_write` | Write data to a spreadsheet |
-| `sheets_append` | Append rows to a spreadsheet |
+| `sheets_read` | Read data from spreadsheet |
+| `sheets_write` | Write data to cells |
+| `sheets_append` | Append rows to spreadsheet |
+| `sheets_delete` | Delete a spreadsheet |
 
 ### Docs
 
@@ -153,57 +97,217 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
 |------|-------------|
 | `docs_create` | Create a new document |
 | `docs_read` | Read a document |
-
-### Drive
-
-| Tool | Description |
-|------|-------------|
-| `drive_list_files` | List files in Drive |
-| `drive_create_file` | Create a file or folder |
-| `drive_share_file` | Share a file with another user |
+| `docs_append` | Append text to document |
+| `docs_delete` | Delete a document |
 
 ### Slides
 
 | Tool | Description |
 |------|-------------|
 | `slides_create` | Create a new presentation |
+| `slides_read` | Read a presentation |
+| `slides_delete` | Delete a presentation |
 
-## Example Usage
+### Calendar
 
-After setting up Claude Desktop, you can ask:
+| Tool | Description |
+|------|-------------|
+| `calendar_create_event` | Create a new event |
+| `calendar_list_events` | List calendar events |
+| `calendar_update_event` | Update an event |
+| `calendar_delete_event` | Delete an event |
 
-- "List my recent emails"
-- "Create a spreadsheet named 'Q1 Sales' with data [['Product', 'Amount'], ['Widget', '$100']]"
-- "Send an email to john@example.com with subject 'Hello' and body 'Testing MCP'"
-- "Create a document titled 'Meeting Notes' with content 'Discussed project timeline'"
+## Configuration
+
+Edit `.env` to set your default Google account:
+
+```env
+GOGCLI_ACCOUNT="your.email@gmail.com"
+```
+
+## Examples
+
+### Sending an HTML Email
+
+```json
+{
+  "tool": "gmail_send_email",
+  "arguments": {
+    "to": "recipient@example.com",
+    "subject": "Hello",
+    "body": "<h1>Hello World</h1><p>This is <strong>HTML</strong>!</p>",
+    "html": true
+  }
+}
+```
+
+### Creating a Spreadsheet with Data
+
+```json
+{
+  "tool": "sheets_create",
+  "arguments": {
+    "title": "Sales Data",
+    "account": "your.email@gmail.com"
+  }
+}
+```
+
+Then write data:
+
+```json
+{
+  "tool": "sheets_write",
+  "arguments": {
+    "spreadsheet_id": "YOUR_SHEET_ID",
+    "range": "Sheet1!A1:C2",
+    "data": "[[\"Name\", \"Email\", \"Phone\"], [\"John\", \"john@example.com\", \"555-1234\"]]"
+  }
+}
+```
+
+### Creating a Calendar Event
+
+```json
+{
+  "tool": "calendar_create_event",
+  "arguments": {
+    "title": "Team Meeting",
+    "start": "tomorrow 10am",
+    "end": "tomorrow 11am",
+    "description": "Weekly sync",
+    "location": "Conference Room A"
+  }
+}
+```
+
+## gogcli Commands Reference
+
+### Gmail
+
+```bash
+# Send email
+gogcli gmail send --to=recipient@example.com --subject="Hello" --body="World"
+
+# Send HTML email (from file)
+echo "<h1>Hello</h1>" > /tmp/email.html
+gogcli gmail send --to=recipient@example.com --subject="HTML" --body-file=/tmp/email.html
+
+# List emails
+gogcli gmail list --limit=10
+
+# Search emails
+gogcli gmail search --query="from:john@example.com"
+
+# Read email
+gogcli gmail read --id=MESSAGE_ID
+```
+
+### Sheets
+
+```bash
+# Create spreadsheet
+gogcli sheets create --title="My Sheet"
+
+# Read data
+gogcli sheets get --id=SHEET_ID --range=Sheet1!A1:D10
+
+# Write data
+echo "Name,Age" | gogcli sheets update --id=SHEET_ID --range=Sheet1!A1 --data=-
+
+# Append rows
+echo "John,30" | gogcli sheets append --id=SHEET_ID --range=Sheet1!A1 --data=-
+
+# Delete spreadsheet
+gogcli sheets delete --id=SHEET_ID
+```
+
+### Docs
+
+```bash
+# Create document
+gogcli docs create --title="My Doc"
+
+# Read document
+gogcli docs get --id=DOC_ID
+
+# Append text
+gogcli docs append --id=DOC_ID --text="New content"
+
+# Delete document
+gogcli docs delete --id=DOC_ID
+```
+
+### Calendar
+
+```bash
+# Create event
+gogcli calendar create --title="Meeting" --start="tomorrow 10am" --end="tomorrow 11am"
+
+# List events
+gogcli calendar list --limit=10
+
+# Update event
+gogcli calendar update --id=EVENT_ID --title="New Title"
+
+# Delete event
+gogcli calendar delete --id=EVENT_ID
+```
+
+## Architecture
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Claude Desktop │────▶│  MCP Server     │────▶│    gogcli       │
+│  (MCP Client)   │     │  (SSE/stdio)    │     │  (CLI Tool)     │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                                │
+                                ▼
+                        ┌─────────────────┐
+                        │  Google OAuth   │
+                        │  (keyring)      │
+                        └─────────────────┘
+```
 
 ## Troubleshooting
 
-### "OAuth credentials not set" Error
+### "gogcli not found"
 
-Make sure `.env` exists and contains valid credentials:
-- `GOOGLE_OAUTH_CLIENT_ID`
-- `GOOGLE_OAUTH_CLIENT_SECRET`
+Install gogcli from releases:
+```bash
+bash legacy-extras/install-gogcli.sh
+```
 
-### "API not enabled" Error
+### "Authentication required"
 
-Make sure you've enabled all required APIs in Google Cloud Console (see step 2 in Manual Installation).
+Run gogcli auth:
+```bash
+gogcli auth login
+```
 
-### Authentication Fails
+### Server won't start on port 9001
 
-1. Delete `token.json` if it exists
-2. Try again - you'll be re-prompted to authenticate
+Check if port is in use:
+```bash
+lsof -i :9001
+```
 
-### Browser Doesn't Open
+Use a different port:
+```bash
+./install.sh --server-only 8080
+```
 
-If the browser doesn't open automatically, look for a URL in the terminal output and paste it into your browser manually.
+### expect not found (for HTML emails)
 
-## Security
+On Ubuntu/Debian:
+```bash
+sudo apt-get install expect
+```
 
-- **Never commit** `.env`, `token.json`, or any credentials to version control
-- The `.gitignore` is configured to exclude these files
-- Use `OAUTHLIB_INSECURE_TRANSPORT=1` only for local development
-- For production, use HTTPS and proper OAuth callbacks
+On macOS:
+```bash
+brew install expect
+```
 
 ## Development
 
@@ -232,9 +336,10 @@ MIT License - see [LICENSE](LICENSE) file for details
 ## Links
 
 - [MCP Specification](https://modelcontextprotocol.io)
-- [Google APIs Documentation](https://developers.google.com/apis-explorer)
-- [OAuth 2.0 for Mobile & Desktop Apps](https://developers.google.com/identity/protocols/oauth2/native-app)
+- [gogcli GitHub](https://github.com/steipete/gogcli)
+- [gogcli Releases](https://github.com/steipete/gogcli/releases)
+- [GOGCLI Guide](legacy-extras/GOGCLI-GUIDE.md)
 
 ---
 
-**Note**: This project is not affiliated with or endorsed by Google. It uses Google APIs and OAuth 2.0 for authentication.
+**Repository**: https://github.com/Zurybr/google-workspace-mcp-server

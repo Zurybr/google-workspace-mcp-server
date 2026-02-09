@@ -1,6 +1,10 @@
 #!/bin/bash
 # Google Workspace MCP Server - Interactive Installer
 # This script guides you through setting up OAuth credentials and installing dependencies
+#
+# Usage:
+#   ./install.sh              - Interactive installation
+#   ./install.sh --server-only - Start the MCP server on port 9001
 
 set -e
 
@@ -53,324 +57,173 @@ detect_os() {
         print_error "Unsupported OS: $OSTYPE"
         exit 1
     fi
-    print_success "Detected OS: $OS"
 }
 
-# Check Python version
-check_python() {
-    print_step "Checking Python version..."
+# Check if gogcli is installed
+check_gogcli() {
+    if command -v gogcli &> /dev/null; then
+        print_success "gogcli found: $(gogcli --version 2>&1 | head -1)"
+        return 0
+    else
+        print_error "gogcli not found!"
+        print_info "Please install gogcli from https://github.com/steipete/gogcli/releases"
+        print_info "Or run: bash legacy-extras/install-gogcli.sh"
+        return 1
+    fi
+}
 
+# Start server in SSE mode
+start_server() {
+    local port=${1:-9001}
+
+    print_header "Starting Google Workspace MCP Server"
+    echo ""
+
+    # Check gogcli
+    if ! check_gogcli; then
+        exit 1
+    fi
+
+    # Check if virtual environment exists
+    if [ ! -d ".venv" ]; then
+        print_info "Virtual environment not found. Creating..."
+        python3 -m venv .venv
+        source .venv/bin/activate
+        pip install -e . -q
+    else
+        source .venv/bin/activate
+    fi
+
+    # Check default account
+    if [ -f ".env" ] && grep -q "GOGCLI_ACCOUNT" .env; then
+        source .env
+        print_success "Using account: ${GOGCLI_ACCOUNT:-default}"
+    else
+        print_info "No default account set. Using gogcli default."
+        print_info "Set GOGCLI_ACCOUNT in .env to specify default account."
+    fi
+
+    echo ""
+    print_step "Starting server on port $port..."
+    echo ""
+    print_info "Server will be available at: http://localhost:$port/sse"
+    print_info "Press Ctrl+C to stop"
+    echo ""
+
+    # Start the server
+    python -m google_workspace_mcp.gogcli_server --server-only --port "$port"
+}
+
+# Main installation flow
+main() {
+    # Check for --server-only flag
+    if [[ "$1" == "--server-only" ]]; then
+        start_server "${2:-9001}"
+        exit 0
+    fi
+
+    # Show help if requested
+    if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+        echo "Google Workspace MCP Server - Installer"
+        echo ""
+        echo "Usage:"
+        echo "  ./install.sh              - Interactive installation"
+        echo "  ./install.sh --server-only [PORT]  - Start MCP server (default port: 9001)"
+        echo "  ./install.sh --help       - Show this help"
+        echo ""
+        exit 0
+    fi
+
+    # Interactive installation
+    print_header "Google Workspace MCP Server - Installer"
+    echo ""
+    print_info "This installer will guide you through:"
+    echo "  1. Checking gogcli installation"
+    echo "  2. Installing Python dependencies"
+    echo "  3. Configuring the server"
+    echo ""
+    print_info "For OAuth setup with gogcli, see: legacy-extras/GOGCLI-GUIDE.md"
+    echo ""
+    read -p "Press Enter to continue..."
+
+    detect_os
+
+    # Check Python
+    print_step "Checking Python version..."
     if ! command -v python3 &> /dev/null; then
         print_error "Python 3 is not installed"
-        print_info "Please install Python 3.10 or higher"
         exit 1
     fi
-
     PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
-    PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
-    PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
-
-    if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 10 ]); then
-        print_error "Python 3.10+ is required (found: $PYTHON_VERSION)"
-        exit 1
-    fi
-
     print_success "Python $PYTHON_VERSION detected"
-}
 
-# Install UV package manager
-install_uv() {
-    print_step "Installing UV package manager..."
-
+    # Check UV
+    print_step "Checking UV package manager..."
     if command -v uv &> /dev/null; then
         print_success "UV already installed"
     else
         print_info "Installing UV..."
         curl -LsSf https://astral.sh/uv/install.sh | sh
         export PATH="$HOME/.local/bin:$PATH"
-
-        # Add to shell profile if needed
-        if [ -f "$HOME/.bashrc" ]; then
-            if ! grep -q ".local/bin" "$HOME/.bashrc"; then
-                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-            fi
-        fi
-        if [ -f "$HOME/.zshrc" ]; then
-            if ! grep -q ".local/bin" "$HOME/.zshrc"; then
-                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
-            fi
-        fi
-
         print_success "UV installed"
     fi
-}
 
-# Get user email
-get_email() {
-    print_header "Step 1: Google Account"
+    # Check gogcli
     echo ""
-    read -p "Enter your Google email address: " GOOGLE_EMAIL
-    while [ -z "$GOOGLE_EMAIL" ]; do
-        print_error "Email cannot be empty"
-        read -p "Enter your Google email address: " GOOGLE_EMAIL
-    done
-    print_success "Email: $GOOGLE_EMAIL"
-}
-
-# Get OAuth credentials from Google Cloud Console
-get_oauth_credentials() {
-    print_header "Step 2: Google Cloud OAuth Setup"
-    echo ""
-    print_info "We need to create OAuth credentials in Google Cloud Console"
-    echo ""
-
-    # Store the current project ID if it exists in the URL
-    PROJECT_ID="agents-ai-demo"
-
-    print_step "Opening Google Cloud Console..."
-    echo ""
-    print_info "1. If prompted, select your Google account: $GOOGLE_EMAIL"
-    print_info "2. Click 'Create credentials' > 'OAuth client ID'"
-    print_info "3. Application type: Select 'Desktop app'"
-    print_info "4. Name: Enter 'MCP Server' (or any name you prefer)"
-    print_info "5. Click 'Create'"
-    print_info "6. Copy the Client ID and Client Secret"
-    echo ""
-
-    # Open the browser with the project
-    AUTH_URL="https://console.cloud.google.com/apis/credentials/oauthclient?project=$PROJECT_ID"
-    print_info "Opening: $AUTH_URL"
-
-    if command -v $OPEN_CMD &> /dev/null; then
-        $OPEN_CMD "$AUTH_URL" 2>/dev/null &
+    print_step "Checking gogcli installation..."
+    if ! check_gogcli; then
+        print_info "You can install gogcli by running:"
+        print_info "  bash legacy-extras/install-gogcli.sh"
+        print_info ""
+        read -p "Press Enter to continue anyway, or Ctrl+C to exit..."
     fi
 
+    # Install dependencies
     echo ""
-    print_info "After creating the OAuth client, you'll see a dialog with:"
-    print_info "  - Client ID (starts with numbers, like 123456789-...)"
-    print_info "  - Client secret (shorter string)"
-    echo ""
-
-    # Get Client ID
-    read -p "Paste your Client ID here: " CLIENT_ID
-    while [ -z "$CLIENT_ID" ]; do
-        print_error "Client ID cannot be empty"
-        read -p "Paste your Client ID here: " CLIENT_ID
-    done
-
-    # Get Client Secret
-    read -p "Paste your Client Secret here: " CLIENT_SECRET
-    while [ -z "$CLIENT_SECRET" ]; do
-        print_error "Client Secret cannot be empty"
-        read -p "Paste your Client Secret here: " CLIENT_SECRET
-    done
-
-    print_success "OAuth credentials received"
-}
-
-# Guide user to enable APIs
-enable_apis() {
-    print_header "Step 3: Enable Google APIs"
-    echo ""
-    print_info "Now we need to enable the required Google APIs"
-    echo ""
-
-    # APIs to enable
-    APIS=(
-        "Gmail API:gmail"
-        "Google Drive API:drive"
-        "Google Sheets API:sheets"
-        "Google Docs API:docs"
-        "Google Slides API:slides"
-    )
-
-    print_info "I'll open each API page. Just click 'Enable' if it's not already enabled."
-    echo ""
-    read -p "Press Enter to continue..."
-
-    for api in "${APIS[@]}"; do
-        api_name="${api%%:*}"
-        api_id="${api##*:}"
-        api_url="https://console.cloud.google.com/apis/library/${api_id}.api?project=$PROJECT_ID"
-
-        print_step "Enabling $api_name..."
-        print_info "Opening: $api_url"
-
-        if command -v $OPEN_CMD &> /dev/null; then
-            $OPEN_CMD "$api_url" 2>/dev/null &
-        fi
-
-        sleep 1
-    done
-
-    echo ""
-    print_success "API pages opened. Please make sure each API is enabled."
-    print_info "Press Enter when you're done..."
-    read
-}
-
-# Create .env file
-create_env_file() {
-    print_header "Step 4: Create Configuration"
-    echo ""
-
-    ENV_FILE=".env"
-
-    cat > "$ENV_FILE" << EOF
-# Google Workspace MCP Server Configuration
-# Generated by install.sh on $(date)
-
-# =============================================
-# REQUIRED - OAuth Credentials
-# =============================================
-GOOGLE_OAUTH_CLIENT_ID="$CLIENT_ID"
-GOOGLE_OAUTH_CLIENT_SECRET="$CLIENT_SECRET"
-
-# Default user email
-USER_GOOGLE_EMAIL="$GOOGLE_EMAIL"
-
-# =============================================
-# OPTIONAL - Server Configuration
-# =============================================
-# Port for HTTP mode (default: 8000)
-# WORKSPACE_MCP_PORT=8000
-
-# Log level (DEBUG, INFO, WARNING, ERROR)
-# LOG_LEVEL=INFO
-
-# =============================================
-# DEVELOPMENT - Only for local development
-# =============================================
-# Allow HTTP redirect URIs (NEVER use in production)
-OAUTHLIB_INSECURE_TRANSPORT=1
-EOF
-
-    print_success "Created $ENV_FILE"
-    print_info "Your credentials are stored in $ENV_FILE"
-    print_info "⚠️  Never commit .env to version control!"
-}
-
-# Install Python dependencies
-install_dependencies() {
-    print_header "Step 5: Install Dependencies"
-    echo ""
-
-    print_step "Creating virtual environment..."
+    print_step "Installing Python dependencies..."
     uv venv || python3 -m venv .venv
 
-    print_step "Installing MCP server..."
     if [ "$OS" = "windows" ]; then
-        .venv/Scripts/pip install -e .
+        .venv/Scripts/pip install -e . -q
     else
         source .venv/bin/activate
-        uv pip install -e .
+        uv pip install -e . -q
     fi
-
     print_success "Dependencies installed"
-}
 
-# Test the installation
-test_installation() {
-    print_header "Step 6: Test Installation"
+    # Configure .env
     echo ""
-
-    print_info "Let's verify the server can start..."
-    echo ""
-
-    # Check if .env exists
+    print_step "Creating .env file..."
     if [ ! -f ".env" ]; then
-        print_error ".env file not found!"
-        exit 1
-    fi
-
-    # Test import
-    print_step "Testing Python imports..."
-
-    if [ "$OS" = "windows" ]; then
-        .venv/Scripts/python -c "import google_workspace_mcp; print('✓ Imports successful')"
+        cp .env.example .env
+        print_success "Created .env from .env.example"
+        print_info "Edit .env to set your GOGCLI_ACCOUNT if needed"
     else
-        source .venv/bin/activate
-        python -c "import google_workspace_mcp; print('✓ Imports successful')"
+        print_info ".env already exists"
     fi
 
-    print_success "Installation test passed!"
-}
-
-# Print final instructions
-print_final_instructions() {
+    # Final instructions
+    echo ""
     print_header "Installation Complete!"
     echo ""
     print_success "Your Google Workspace MCP Server is ready!"
     echo ""
-    echo "Next Steps:"
+    echo "Quick Start:"
     echo ""
-    echo "1. Activate the virtual environment:"
-    if [ "$OS" = "windows" ]; then
-        echo "   .venv\\Scripts\\activate"
-    elif [ "$OS" = "macos" ]; then
-        echo "   source .venv/bin/activate"
-    else
-        echo "   source .venv/bin/activate"
-    fi
+    echo "1. Start the server:"
+    echo "   ./install.sh --server-only"
     echo ""
-    echo "2. Run the server:"
-    echo "   python -m google_workspace_mcp.server"
+    echo "2. Or specify a custom port:"
+    echo "   ./install.sh --server-only 8080"
     echo ""
-    echo "3. Or use with Claude Desktop by adding to claude_desktop_config.json:"
+    echo "3. Server will be available at: http://localhost:9001/sse"
     echo ""
-    echo "   {"
-    echo "     \"mcpServers\": {"
-    echo "       \"google-workspace\": {"
-    echo "         \"command\": \"$(pwd)/.venv/bin/python\","
-    echo "         \"args\": [\"-m\", \"google_workspace_mcp.server\"],"
-    echo "         \"env\": {"
-    echo "           \"GOOGLE_OAUTH_CLIENT_ID\": \"$CLIENT_ID\","
-    echo "           \"GOOGLE_OAUTH_CLIENT_SECRET\": \"$CLIENT_SECRET\","
-    echo "           \"USER_GOOGLE_EMAIL\": \"$GOOGLE_EMAIL\","
-    echo "           \"OAUTHLIB_INSECURE_TRANSPORT\": \"1\""
-    echo "         }"
-    echo "       }"
-    echo "     }"
-    echo "   }"
+    echo "Documentation: https://github.com/Zurybr/google-workspace-mcp-server"
     echo ""
-    echo "Documentation: https://github.com/yourusername/google-workspace-mcp-server"
+    print_info "⚠️  Make sure gogcli is authenticated before using tools!"
+    print_info "   Run: gogcli auth login"
     echo ""
-    print_info "⚠️  First time you use a tool, you'll need to authenticate in your browser."
-    echo ""
-}
-
-# Main installation flow
-main() {
-    print_header "Google Workspace MCP Server - Installer"
-    echo ""
-    print_info "This installer will guide you through:"
-    echo "  1. Setting up OAuth credentials in Google Cloud Console"
-    echo "  2. Enabling required Google APIs"
-    echo "  3. Installing dependencies"
-    echo "  4. Configuring the server"
-    echo ""
-    read -p "Press Enter to continue..."
-
-    echo ""
-    detect_os
-    check_python
-    install_uv
-
-    echo ""
-    get_email
-    echo ""
-    get_oauth_credentials
-    echo ""
-    enable_apis
-    echo ""
-    create_env_file
-    echo ""
-    install_dependencies
-    echo ""
-    test_installation
-    echo ""
-    print_final_instructions
 }
 
 # Run main function
-main
+main "$@"
