@@ -152,7 +152,7 @@ async def handle_list_resources() -> list:
 async def handle_read_resource(uri: str) -> str:
     """Read a resource"""
     if uri == "workspace://info":
-        return """Google Workspace MCP Server v0.3.0 (gogcli Edition)
+        return """Google Workspace MCP Server v0.4.0 (gogcli Edition)
 
 This server provides tools for interacting with Google Workspace services:
 - Gmail: Send, read, search emails with HTML support
@@ -661,6 +661,68 @@ async def handle_list_tools() -> list[Tool]:
                 "required": ["file_id"],
             },
         ),
+        Tool(
+            name="drive_copy",
+            description="Copy a file in Google Drive",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "File ID to copy"},
+                    "name": {"type": "string", "description": "Name for the copy"},
+                    "folder_id": {"type": "string", "description": "Folder ID to copy to (optional)"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["file_id", "name"],
+            },
+        ),
+        Tool(
+            name="drive_unshare",
+            description="Remove a permission from a Google Drive file",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "File ID"},
+                    "permission_id": {"type": "string", "description": "Permission ID to remove"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["file_id", "permission_id"],
+            },
+        ),
+        Tool(
+            name="drive_list_drives",
+            description="List shared drives (Team Drives) in Google Drive",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+            },
+        ),
+        Tool(
+            name="drive_list_comments",
+            description="List comments on a Google Drive file",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "File ID"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["file_id"],
+            },
+        ),
+        Tool(
+            name="drive_add_comment",
+            description="Add a comment to a Google Drive file",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "File ID"},
+                    "content": {"type": "string", "description": "Comment content"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["file_id", "content"],
+            },
+        ),
     ]
 
 
@@ -909,7 +971,8 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             folder_id = arguments.get("folder_id", "")
             args = []
             if folder_id:
-                args.extend([f"--parent={folder_id}"])
+                args.extend(["--parent", folder_id])
+            args.append("--json")  # Always return JSON for better parsing
             result = run_gogcli("drive", "ls", args, account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
@@ -984,6 +1047,37 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             result = run_gogcli("drive", "url", [file_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
+        elif name == "drive_copy":
+            file_id = arguments["file_id"]
+            name = arguments["name"]
+            folder_id = arguments.get("folder_id", "")
+            args = [file_id, name]
+            if folder_id:
+                args.extend([f"--folder={folder_id}"])
+            result = run_gogcli("drive", "copy", args, account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_unshare":
+            file_id = arguments["file_id"]
+            permission_id = arguments["permission_id"]
+            result = run_gogcli("drive", "unshare", [file_id, permission_id], account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_list_drives":
+            result = run_gogcli("drive", "drives", [], account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_list_comments":
+            file_id = arguments["file_id"]
+            result = run_gogcli("drive", "comments", ["list", file_id], account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_add_comment":
+            file_id = arguments["file_id"]
+            content = arguments["content"]
+            result = run_gogcli("drive", "comments", ["add", file_id, "--content", content], account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
@@ -1029,7 +1123,7 @@ def main_server_only(port: int = DEFAULT_PORT, detach: bool = False):
                 response = JSONResponse({
                     "status": "ok",
                     "server": "google-workspace-gogcli-server",
-                    "version": "0.3.0",
+                    "version": "0.4.0",
                     "gogcli": "ok" if gogcli_ok else "error",
                     "auth": auth_status,
                     "account": DEFAULT_ACCOUNT or "default"
