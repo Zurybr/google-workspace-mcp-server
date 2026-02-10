@@ -63,12 +63,7 @@ def run_gogcli(
     Returns:
         Dict with success status and result/error
     """
-    acc = account or DEFAULT_ACCOUNT
     gog_cmd = [GOGCLI_BIN, service, command]
-
-    if acc:
-        gog_cmd.extend(["--account", acc])
-
     gog_cmd.extend(args)
 
     # Handle HTML body for emails
@@ -108,6 +103,8 @@ def run_gogcli(
                 "error": result.stderr.strip() or result.stdout.strip(),
                 "returncode": result.returncode
             }
+        #imprimir el comando ejecutado y su resultado para debug
+        print(f"[MCP DEBUG] Command: {' '.join(gog_cmd)}", flush=True)
 
     except subprocess.TimeoutExpired:
         return {
@@ -212,7 +209,6 @@ async def handle_list_tools() -> list[Tool]:
                     "to": {"type": "string", "description": "Recipient email(s), comma-separated"},
                     "subject": {"type": "string", "description": "Email subject"},
                     "body": {"type": "string", "description": "Email body (plain text or HTML)"},
-                    "account": {"type": "string", "description": "Google account to use"},
                     "html": {"type": "boolean", "description": "Treat body as HTML (default: false)", "default": False},
                 },
                 "required": ["to", "subject", "body"],
@@ -225,7 +221,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "limit": {"type": "integer", "description": "Number of emails to list", "default": 10},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
             },
         ),
@@ -237,7 +232,6 @@ async def handle_list_tools() -> list[Tool]:
                 "properties": {
                     "query": {"type": "string", "description": "Search query"},
                     "limit": {"type": "integer", "description": "Number of results", "default": 10},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["query"],
             },
@@ -249,7 +243,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "message_id": {"type": "string", "description": "Gmail message ID"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["message_id"],
             },
@@ -263,7 +256,6 @@ async def handle_list_tools() -> list[Tool]:
                     "message_id": {"type": "string", "description": "Gmail message ID"},
                     "labels": {"type": "string", "description": "Labels to add (comma-separated)"},
                     "remove": {"type": "string", "description": "Labels to remove (comma-separated)"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["message_id"],
             },
@@ -275,7 +267,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "message_id": {"type": "string", "description": "Gmail message ID"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["message_id"],
             },
@@ -287,7 +278,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "message_id": {"type": "string", "description": "Gmail message ID"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["message_id"],
             },
@@ -301,7 +291,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "title": {"type": "string", "description": "Spreadsheet title"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["title"],
             },
@@ -314,7 +303,6 @@ async def handle_list_tools() -> list[Tool]:
                 "properties": {
                     "spreadsheet_id": {"type": "string", "description": "Spreadsheet ID or URL"},
                     "range": {"type": "string", "description": "Cell range (e.g., Sheet1!A1:D10)"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["spreadsheet_id"],
             },
@@ -328,7 +316,6 @@ async def handle_list_tools() -> list[Tool]:
                     "spreadsheet_id": {"type": "string", "description": "Spreadsheet ID or URL"},
                     "range": {"type": "string", "description": "Cell range (e.g., Sheet1!A1:D10)"},
                     "data": {"type": "string", "description": "Data to write (JSON array of arrays or CSV)"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["spreadsheet_id", "range", "data"],
             },
@@ -342,7 +329,6 @@ async def handle_list_tools() -> list[Tool]:
                     "spreadsheet_id": {"type": "string", "description": "Spreadsheet ID or URL"},
                     "range": {"type": "string", "description": "Range to append to"},
                     "data": {"type": "string", "description": "Data to append (JSON array or CSV)"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["spreadsheet_id", "data"],
             },
@@ -354,7 +340,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "spreadsheet_id": {"type": "string", "description": "Spreadsheet ID or URL"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["spreadsheet_id"],
             },
@@ -369,7 +354,6 @@ async def handle_list_tools() -> list[Tool]:
                 "properties": {
                     "title": {"type": "string", "description": "Document title"},
                     "content": {"type": "string", "description": "Initial content"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["title"],
             },
@@ -381,7 +365,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "doc_id": {"type": "string", "description": "Document ID or URL"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["doc_id"],
             },
@@ -394,7 +377,6 @@ async def handle_list_tools() -> list[Tool]:
                 "properties": {
                     "doc_id": {"type": "string", "description": "Document ID or URL"},
                     "text": {"type": "string", "description": "Text to append"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["doc_id", "text"],
             },
@@ -406,7 +388,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "doc_id": {"type": "string", "description": "Document ID or URL"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["doc_id"],
             },
@@ -420,7 +401,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "title": {"type": "string", "description": "Presentation title"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["title"],
             },
@@ -432,7 +412,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "presentation_id": {"type": "string", "description": "Presentation ID or URL"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["presentation_id"],
             },
@@ -444,7 +423,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "presentation_id": {"type": "string", "description": "Presentation ID or URL"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["presentation_id"],
             },
@@ -463,7 +441,6 @@ async def handle_list_tools() -> list[Tool]:
                     "description": {"type": "string", "description": "Event description"},
                     "location": {"type": "string", "description": "Event location"},
                     "attendees": {"type": "string", "description": "Attendees (comma-separated emails)"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["title", "start", "end"],
             },
@@ -477,7 +454,6 @@ async def handle_list_tools() -> list[Tool]:
                     "start": {"type": "string", "description": "Start date (default: today)"},
                     "end": {"type": "string", "description": "End date"},
                     "limit": {"type": "integer", "description": "Max events to return", "default": 10},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
             },
         ),
@@ -488,7 +464,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "event_id": {"type": "string", "description": "Event ID"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["event_id"],
             },
@@ -505,7 +480,6 @@ async def handle_list_tools() -> list[Tool]:
                     "end": {"type": "string", "description": "New end time"},
                     "description": {"type": "string", "description": "New description"},
                     "location": {"type": "string", "description": "New location"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["event_id"],
             },
@@ -517,9 +491,8 @@ async def handle_list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "parent_id": {"type": "string", "description": "Parent folder ID (default: root)"},
-                    "account": {"type": "string", "description": "Google account to use"},
-                },
+                    "parent": {"type": "string", "description": "Parent folder ID (default: root)"}
+                }
             },
         ),
         Tool(
@@ -529,7 +502,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Search query"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["query"],
             },
@@ -541,7 +513,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "file_id": {"type": "string", "description": "File ID"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["file_id"],
             },
@@ -554,7 +525,6 @@ async def handle_list_tools() -> list[Tool]:
                 "properties": {
                     "file_id": {"type": "string", "description": "File ID to download"},
                     "output": {"type": "string", "description": "Output path (optional)"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["file_id"],
             },
@@ -566,8 +536,7 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "file_path": {"type": "string", "description": "Local file path to upload"},
-                    "folder_id": {"type": "string", "description": "Folder ID to upload to (default: root)"},
-                    "account": {"type": "string", "description": "Google account to use"},
+                    "parent": {"type": "string", "description": "Parent folder ID (default: root)"},
                 },
                 "required": ["file_path"],
             },
@@ -579,8 +548,7 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "name": {"type": "string", "description": "Folder name"},
-                    "folder_id": {"type": "string", "description": "Parent folder ID (default: root)"},
-                    "account": {"type": "string", "description": "Google account to use"},
+                    "parent": {"type": "string", "description": "Parent folder ID (default: root)"},
                 },
                 "required": ["name"],
             },
@@ -592,7 +560,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "file_id": {"type": "string", "description": "File ID to delete"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["file_id"],
             },
@@ -604,10 +571,9 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "file_id": {"type": "string", "description": "File ID to move"},
-                    "folder_id": {"type": "string", "description": "Destination folder ID"},
-                    "account": {"type": "string", "description": "Google account to use"},
+                    "parent": {"type": "string", "description": "Destination folder ID"},
                 },
-                "required": ["file_id", "folder_id"],
+                "required": ["file_id", "parent"],
             },
         ),
         Tool(
@@ -618,7 +584,6 @@ async def handle_list_tools() -> list[Tool]:
                 "properties": {
                     "file_id": {"type": "string", "description": "File ID to rename"},
                     "new_name": {"type": "string", "description": "New file name"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["file_id", "new_name"],
             },
@@ -632,7 +597,6 @@ async def handle_list_tools() -> list[Tool]:
                     "file_id": {"type": "string", "description": "File ID to share"},
                     "email": {"type": "string", "description": "Email to share with"},
                     "role": {"type": "string", "description": "Permission role (reader, writer, owner)", "enum": ["reader", "writer", "owner"], "default": "reader"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["file_id", "email"],
             },
@@ -644,7 +608,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "file_id": {"type": "string", "description": "File ID"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["file_id"],
             },
@@ -656,7 +619,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "file_id": {"type": "string", "description": "File ID(s), comma-separated"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["file_id"],
             },
@@ -669,8 +631,7 @@ async def handle_list_tools() -> list[Tool]:
                 "properties": {
                     "file_id": {"type": "string", "description": "File ID to copy"},
                     "name": {"type": "string", "description": "Name for the copy"},
-                    "folder_id": {"type": "string", "description": "Folder ID to copy to (optional)"},
-                    "account": {"type": "string", "description": "Google account to use"},
+                    "parent": {"type": "string", "description": "Parent folder ID to copy to (optional)"},
                 },
                 "required": ["file_id", "name"],
             },
@@ -683,7 +644,6 @@ async def handle_list_tools() -> list[Tool]:
                 "properties": {
                     "file_id": {"type": "string", "description": "File ID"},
                     "permission_id": {"type": "string", "description": "Permission ID to remove"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["file_id", "permission_id"],
             },
@@ -694,7 +654,6 @@ async def handle_list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
             },
         ),
@@ -705,7 +664,6 @@ async def handle_list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "file_id": {"type": "string", "description": "File ID"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["file_id"],
             },
@@ -718,7 +676,6 @@ async def handle_list_tools() -> list[Tool]:
                 "properties": {
                     "file_id": {"type": "string", "description": "File ID"},
                     "content": {"type": "string", "description": "Comment content"},
-                    "account": {"type": "string", "description": "Google account to use"},
                 },
                 "required": ["file_id", "content"],
             },
@@ -968,13 +925,23 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
 
         # DRIVE TOOLS
         elif name == "drive_list_files":
-            parent_id = arguments.get("parent_id", "")
+            import sys
+            parent_id = arguments.get("parent", "")
+            print(f"[MCP DEBUG] drive_list_files called with parent={parent_id}", file=sys.stderr, flush=True)
             args = []
             if parent_id:
                 args.extend(["--parent", parent_id])
-            args.append("--json")  # Always return JSON for better parsing
+            print(f"[MCP DEBUG] args={args}", file=sys.stderr, flush=True)
             result = run_gogcli("drive", "ls", args, account)
-            return [TextContent(type="text", text=result.get("output", result["error"]))]
+            print(f"[MCP DEBUG] result success={result.get('success')}", file=sys.stderr, flush=True)
+            print(f"[MCP DEBUG] result output={result.get('output', 'N/A')[:100]}", file=sys.stderr, flush=True)
+            print(f"[MCP DEBUG] result error={result.get('error', 'N/A')[:100]}", file=sys.stderr, flush=True)
+            # formar el comando que se va a ejecutar en gogcli
+            print(f"[MCP DEBUG] Running gogcli command: gogcli drive ls {' '.join(args)}", file=sys.stderr, flush=True)
+            if result.get("success"):
+                return [TextContent(type="text", text=result.get("output", "No output"))]
+            else:
+                return [TextContent(type="text", text=f"Error: {result.get('error', 'Unknown error')}")]
 
         elif name == "drive_search":
             query = arguments["query"]
@@ -997,19 +964,19 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
 
         elif name == "drive_upload":
             file_path = arguments["file_path"]
-            folder_id = arguments.get("folder_id", "")
+            parent = arguments.get("parent", "")
             args = [file_path]
-            if folder_id:
-                args.extend([f"--folder={folder_id}"])
+            if parent:
+                args.extend([f"--folder={parent}"])
             result = run_gogcli("drive", "upload", args, account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "drive_mkdir":
             name = arguments["name"]
-            folder_id = arguments.get("folder_id", "")
+            parent = arguments.get("parent", "")
             args = [name]
-            if folder_id:
-                args.extend([f"--folder={folder_id}"])
+            if parent:
+                args.extend([f"--folder={parent}"])
             result = run_gogcli("drive", "mkdir", args, account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
@@ -1020,8 +987,8 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
 
         elif name == "drive_move":
             file_id = arguments["file_id"]
-            folder_id = arguments["folder_id"]
-            result = run_gogcli("drive", "move", [file_id, f"--folder={folder_id}"], account)
+            parent = arguments.get("parent", "")
+            result = run_gogcli("drive", "move", [file_id, f"--folder={parent}"], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "drive_rename":
@@ -1050,10 +1017,10 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
         elif name == "drive_copy":
             file_id = arguments["file_id"]
             name = arguments["name"]
-            folder_id = arguments.get("folder_id", "")
+            parent = arguments.get("parent", "")
             args = [file_id, name]
-            if folder_id:
-                args.extend([f"--folder={folder_id}"])
+            if parent:
+                args.extend([f"--folder={parent}"])
             result = run_gogcli("drive", "copy", args, account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
@@ -1093,6 +1060,7 @@ def main_server_only(port: int = DEFAULT_PORT, detach: bool = False):
     """Run the server in SSE mode on specified port"""
     from mcp.server.sse import SseServerTransport
     import uvicorn
+    import asyncio
 
     # Create SSE transport
     sse_transport = SseServerTransport("/messages")
