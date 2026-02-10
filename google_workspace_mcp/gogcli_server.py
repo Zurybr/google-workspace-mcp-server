@@ -3,18 +3,27 @@
 Google Workspace MCP Server - gogcli Backend
 
 An MCP server that provides tools for interacting with Google Workspace services
-using gogcli as the backend (OAuth via gogcli keyring).
+using gogcli as the backend (direct execution).
 
-Services: Gmail, Sheets, Docs, Slides, Calendar
+Services: Gmail, Sheets, Docs, Slides, Calendar, Drive
 """
 
 import asyncio
 import json
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import Any
+
+# Load .env file if it exists
+try:
+    from dotenv import load_dotenv
+    # Try to load .env from the project directory
+    env_path = Path(__file__).parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    pass
 
 import httpx
 from mcp.server.models import InitializationOptions
@@ -29,7 +38,7 @@ from mcp.types import (
 # Configuration
 DEFAULT_PORT = 9001
 GOGCLI_BIN = os.getenv("GOGCLI_BIN", "gogcli")
-DEFAULT_ACCOUNT = os.getenv("GOGCLI_ACCOUNT", "")
+DEFAULT_ACCOUNT = os.getenv("GOGCLI_ACCOUNT", None)  # Use None instead of empty string
 
 
 def run_gogcli(
@@ -37,36 +46,55 @@ def run_gogcli(
     command: str,
     args: list[str],
     account: str | None = None,
+    html_body: str | None = None,
     timeout: int = 60
 ) -> dict[str, Any]:
     """
-    Run a gogcli command and return the result
+    Run a gogcli command directly and return the result
 
     Args:
-        service: The gogcli service (gmail, sheets, docs, slides, calendar)
+        service: The gogcli service (gmail, sheets, docs, slides, calendar, drive)
         command: The command to run
         args: Additional arguments
         account: Google account to use
+        html_body: HTML content for email (optional)
         timeout: Command timeout in seconds
 
     Returns:
         Dict with success status and result/error
     """
     acc = account or DEFAULT_ACCOUNT
-    cmd = [GOGCLI_BIN, service, command]
+    gog_cmd = [GOGCLI_BIN, service, command]
 
     if acc:
-        cmd.extend(["--account", acc])
+        gog_cmd.extend(["--account", acc])
 
-    cmd.extend(args)
+    gog_cmd.extend(args)
+
+    # Handle HTML body for emails
+    if html_body:
+        # Create temp file with HTML content
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+            f.write(html_body)
+            html_file = f.name
+
+        gog_cmd.extend(["--body-html", f"@{html_file}"])
 
     try:
         result = subprocess.run(
-            cmd,
+            gog_cmd,
             capture_output=True,
             text=True,
             timeout=timeout
         )
+
+        # Cleanup temp file if created
+        if html_body:
+            try:
+                os.unlink(html_file)
+            except:
+                pass
 
         if result.returncode == 0:
             return {
@@ -86,119 +114,6 @@ def run_gogcli(
             "success": False,
             "error": f"Command timed out after {timeout} seconds"
         }
-    except FileNotFoundError:
-        return {
-            "success": False,
-            "error": f"gogcli not found. Install it from https://github.com/steipete/gogcli/releases"
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-
-def run_gogcli_with_expect(
-    service: str,
-    command: str,
-    args: list[str],
-    account: str | None = None,
-    html_body: str | None = None,
-    timeout: int = 60
-) -> dict[str, Any]:
-    """
-    Run a gogcli command with expect for keyring passphrase automation
-    Supports HTML email using the confirmed working method (variable shell expansion)
-
-    Args:
-        service: The gogcli service
-        command: The command to run
-        args: Additional arguments
-        account: Google account to use
-        html_body: HTML content for email (optional)
-        timeout: Command timeout in seconds
-
-    Returns:
-        Dict with success status and result/error
-    """
-    acc = account or DEFAULT_ACCOUNT
-    gog_cmd = [GOGCLI_BIN, service, command]
-
-    if acc:
-        gog_cmd.extend(["--account", acc])
-
-    gog_cmd.extend(args)
-
-    # Build expect script with the CONFIRMED working method
-    # Using variable shell expansion (Prueba 6 - message_id: 19c4434e4fb9417f)
-    if html_body:
-        # Create temp file with HTML content
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
-            # Escape single quotes and backslashes in HTML
-            escaped_html = html_body.replace('\\', '\\\\').replace('"', '\\"')
-            f.write(escaped_html)
-            html_file = f.name
-
-        # Use the confirmed working method: variable shell expansion
-        expect_script = f'''set timeout {timeout}
-set html_body [exec cat {html_file}]
-spawn sh -c "{{" ".join(gog_cmd)}} --body-html=$html_body"
-expect {{
-    "Enter passphrase" {{ send "\\r"; exp_continue }}
-    timeout {{ puts "Timeout waiting for response"; exit 1 }}
-    eof
-}}
-exec rm {html_file}
-'''
-    else:
-        # Standard expect without HTML
-        expect_script = f'''set timeout {timeout}
-spawn sh -c '{" ".join(gog_cmd)}'
-expect {{
-    "Enter passphrase" {{ send "\\r"; exp_continue }}
-    timeout {{ puts "Timeout waiting for response"; exit 1 }}
-    eof
-}}
-'''
-
-    try:
-        result = subprocess.run(
-            ["expect", "-c", expect_script],
-            capture_output=True,
-            text=True,
-            timeout=timeout + 5
-        )
-
-        # Filter out expect's own messages
-        output_lines = []
-        for line in result.stdout.split('\n'):
-            if not line.startswith('spawn') and not line.startswith('set timeout') and not line.startswith('exec rm'):
-                output_lines.append(line)
-
-        output = '\n'.join(output_lines).strip()
-
-        if result.returncode == 0:
-            return {
-                "success": True,
-                "output": output,
-                "stderr": result.stderr.strip()
-            }
-        else:
-            return {
-                "success": False,
-                "error": result.stderr.strip() or output,
-                "returncode": result.returncode
-            }
-
-    except FileNotFoundError:
-        # expect not found, try without it
-        if html_body:
-            # Cleanup temp file if expect failed
-            try:
-                os.unlink(html_file)
-            except:
-                pass
-        return run_gogcli(service, command, args, account, timeout)
     except Exception as e:
         return {
             "success": False,
@@ -237,19 +152,18 @@ async def handle_list_resources() -> list:
 async def handle_read_resource(uri: str) -> str:
     """Read a resource"""
     if uri == "workspace://info":
-        return """Google Workspace MCP Server v0.2.0 (gogcli Edition)
+        return """Google Workspace MCP Server v0.3.0 (gogcli Edition)
 
 This server provides tools for interacting with Google Workspace services:
-- Gmail: Send, read, search emails with HTML support (FIXED - uses --body-html)
+- Gmail: Send, read, search emails with HTML support
 - Sheets: Create, read, write, delete spreadsheets and cells
 - Docs: Create, read, edit, delete documents
 - Slides: Create, read, edit presentations
 - Calendar: Create, read, update, delete events
+- Drive: List, search, upload, download, share files and folders
 
 Backend: gogcli (https://github.com/steipete/gogcli)
-Authentication: OAuth via gogcli keyring with expect automation
-
-HTML Email Method: Variable shell expansion (message_id: 19c4434e4fb9417f confirmed working)
+Authentication: Direct OAuth execution (no keyring needed)
 
 Run ./install.sh --server-only to start the server on port 9001.
 """
@@ -596,6 +510,157 @@ async def handle_list_tools() -> list[Tool]:
                 "required": ["event_id"],
             },
         ),
+        # DRIVE TOOLS
+        Tool(
+            name="drive_list_files",
+            description="List files in Google Drive folder",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "folder_id": {"type": "string", "description": "Folder ID (default: root)"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+            },
+        ),
+        Tool(
+            name="drive_search",
+            description="Search files in Google Drive",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="drive_get_file",
+            description="Get file metadata from Google Drive",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "File ID"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["file_id"],
+            },
+        ),
+        Tool(
+            name="drive_download",
+            description="Download a file from Google Drive",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "File ID to download"},
+                    "output": {"type": "string", "description": "Output path (optional)"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["file_id"],
+            },
+        ),
+        Tool(
+            name="drive_upload",
+            description="Upload a file to Google Drive",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string", "description": "Local file path to upload"},
+                    "folder_id": {"type": "string", "description": "Folder ID to upload to (default: root)"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["file_path"],
+            },
+        ),
+        Tool(
+            name="drive_mkdir",
+            description="Create a folder in Google Drive",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Folder name"},
+                    "folder_id": {"type": "string", "description": "Parent folder ID (default: root)"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["name"],
+            },
+        ),
+        Tool(
+            name="drive_delete",
+            description="Delete a file from Google Drive (moves to trash)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "File ID to delete"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["file_id"],
+            },
+        ),
+        Tool(
+            name="drive_move",
+            description="Move a file to a different folder in Google Drive",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "File ID to move"},
+                    "folder_id": {"type": "string", "description": "Destination folder ID"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["file_id", "folder_id"],
+            },
+        ),
+        Tool(
+            name="drive_rename",
+            description="Rename a file in Google Drive",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "File ID to rename"},
+                    "new_name": {"type": "string", "description": "New file name"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["file_id", "new_name"],
+            },
+        ),
+        Tool(
+            name="drive_share",
+            description="Share a file in Google Drive",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "File ID to share"},
+                    "email": {"type": "string", "description": "Email to share with"},
+                    "role": {"type": "string", "description": "Permission role (reader, writer, owner)", "enum": ["reader", "writer", "owner"], "default": "reader"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["file_id", "email"],
+            },
+        ),
+        Tool(
+            name="drive_permissions",
+            description="List permissions on a Google Drive file",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "File ID"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["file_id"],
+            },
+        ),
+        Tool(
+            name="drive_url",
+            description="Get web URL for a Google Drive file",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "File ID(s), comma-separated"},
+                    "account": {"type": "string", "description": "Google account to use"},
+                },
+                "required": ["file_id"],
+            },
+        ),
     ]
 
 
@@ -607,42 +672,25 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
     try:
         # SYSTEM/STATUS TOOLS
         if name == "gogcli_status":
-            # Check gogcli authentication status
-            auth_result = subprocess.run(
-                [GOGCLI_BIN, "auth", "status"],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-
-            # Get config info
-            config_result = subprocess.run(
-                [GOGCLI_BIN, "config", "show"],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+            # Use expect for keyring automation
+            auth_result = run_gogcli("auth", "status", [], account=None, timeout=10)
+            config_result = run_gogcli("config", "list", [], account=None, timeout=10)
 
             status_info = {
                 "gogcli_bin": GOGCLI_BIN,
                 "default_account": DEFAULT_ACCOUNT or "not set",
-                "auth_status": "authenticated" if auth_result.returncode == 0 else "not authenticated",
-                "auth_output": auth_result.stdout.strip() if auth_result.returncode == 0 else auth_result.stderr.strip(),
-                "config": config_result.stdout.strip() if config_result.returncode == 0 else "config not available"
+                "auth_status": "authenticated" if auth_result["success"] else "not authenticated",
+                "auth_output": auth_result.get("output", auth_result.get("error", "")),
+                "config": config_result.get("output", "config not available")
             }
             return [TextContent(type="text", text=json.dumps(status_info, indent=2))]
 
         elif name == "gogcli_version":
-            result = subprocess.run(
-                [GOGCLI_BIN, "--version"],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if result.returncode == 0:
-                return [TextContent(type="text", text=result.stdout.strip())]
+            result = run_gogcli("--version", "", [], account=None, timeout=10)
+            if result["success"]:
+                return [TextContent(type="text", text=result.get("output", result.get("error", "")))]
             else:
-                return [TextContent(type="text", text=f"Error getting version: {result.stderr}")]
+                return [TextContent(type="text", text=f"Error getting version: {result.get('error', '')}")]
 
         # GMAIL TOOLS
         elif name == "gmail_send_email":
@@ -656,10 +704,10 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             if is_html:
                 # FIXED: Use the confirmed working method for HTML
                 # --body-html with expect variable shell expansion
-                result = run_gogcli_with_expect("gmail", "send", args, account, html_body=body)
+                result = run_gogcli("gmail", "send", args, account, html_body=body)
             else:
                 args.extend(["--body", body])
-                result = run_gogcli_with_expect("gmail", "send", args, account)
+                result = run_gogcli("gmail", "send", args, account)
 
             if result["success"]:
                 return [TextContent(type="text", text=f"Email sent successfully!")]
@@ -668,18 +716,18 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
 
         elif name == "gmail_list_emails":
             limit = arguments.get("limit", 10)
-            result = run_gogcli_with_expect("gmail", "list", ["--limit", str(limit)], account)
+            result = run_gogcli("gmail", "list", ["--limit", str(limit)], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "gmail_search_emails":
             query = arguments["query"]
             limit = arguments.get("limit", 10)
-            result = run_gogcli_with_expect("gmail", "search", ["--query", query, "--limit", str(limit)], account)
+            result = run_gogcli("gmail", "search", ["--query", query, "--limit", str(limit)], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "gmail_read_email":
             msg_id = arguments["message_id"]
-            result = run_gogcli_with_expect("gmail", "read", ["--id", msg_id], account)
+            result = run_gogcli("gmail", "read", ["--id", msg_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "gmail_label_email":
@@ -688,34 +736,34 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             remove = arguments.get("remove", "")
 
             if labels:
-                result = run_gogcli_with_expect("gmail", "label", ["--id", msg_id, "--add", labels], account)
+                result = run_gogcli("gmail", "label", ["--id", msg_id, "--add", labels], account)
                 return [TextContent(type="text", text=result.get("output", result["error"]))]
             elif remove:
-                result = run_gogcli_with_expect("gmail", "label", ["--id", msg_id, "--remove", remove], account)
+                result = run_gogcli("gmail", "label", ["--id", msg_id, "--remove", remove], account)
                 return [TextContent(type="text", text=result.get("output", result["error"]))]
             else:
                 return [TextContent(type="text", text="Error: Must specify either 'labels' or 'remove'")]
 
         elif name == "gmail_archive_email":
             msg_id = arguments["message_id"]
-            result = run_gogcli_with_expect("gmail", "archive", ["--id", msg_id], account)
+            result = run_gogcli("gmail", "archive", ["--id", msg_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "gmail_delete_email":
             msg_id = arguments["message_id"]
-            result = run_gogcli_with_expect("gmail", "delete", ["--id", msg_id], account)
+            result = run_gogcli("gmail", "delete", ["--id", msg_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         # SHEETS TOOLS
         elif name == "sheets_create":
             title = arguments["title"]
-            result = run_gogcli_with_expect("sheets", "create", ["--title", title], account)
+            result = run_gogcli("sheets", "create", ["--title", title], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "sheets_read":
             sheet_id = arguments["spreadsheet_id"]
             range_val = arguments.get("range", "A1")
-            result = run_gogcli_with_expect("sheets", "get", ["--id", sheet_id, "--range", range_val], account)
+            result = run_gogcli("sheets", "get", ["--id", sheet_id, "--range", range_val], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "sheets_write":
@@ -733,7 +781,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             except:
                 pass  # Use as-is
 
-            result = run_gogcli_with_expect("sheets", "update", ["--id", sheet_id, "--range", range_val, "--data", data], account)
+            result = run_gogcli("sheets", "update", ["--id", sheet_id, "--range", range_val, "--data", data], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "sheets_append":
@@ -750,12 +798,12 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             except:
                 pass
 
-            result = run_gogcli_with_expect("sheets", "append", ["--id", sheet_id, "--range", range_val, "--data", data], account)
+            result = run_gogcli("sheets", "append", ["--id", sheet_id, "--range", range_val, "--data", data], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "sheets_delete":
             sheet_id = arguments["spreadsheet_id"]
-            result = run_gogcli_with_expect("sheets", "delete", ["--id", sheet_id], account)
+            result = run_gogcli("sheets", "delete", ["--id", sheet_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         # DOCS TOOLS
@@ -764,41 +812,41 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             content = arguments.get("content", "")
 
             if content:
-                result = run_gogcli_with_expect("docs", "create", ["--title", title, "--content", content], account)
+                result = run_gogcli("docs", "create", ["--title", title, "--content", content], account)
             else:
-                result = run_gogcli_with_expect("docs", "create", ["--title", title], account)
+                result = run_gogcli("docs", "create", ["--title", title], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "docs_read":
             doc_id = arguments["doc_id"]
-            result = run_gogcli_with_expect("docs", "get", ["--id", doc_id], account)
+            result = run_gogcli("docs", "get", ["--id", doc_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "docs_append":
             doc_id = arguments["doc_id"]
             text = arguments["text"]
-            result = run_gogcli_with_expect("docs", "append", ["--id", doc_id, "--text", text], account)
+            result = run_gogcli("docs", "append", ["--id", doc_id, "--text", text], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "docs_delete":
             doc_id = arguments["doc_id"]
-            result = run_gogcli_with_expect("docs", "delete", ["--id", doc_id], account)
+            result = run_gogcli("docs", "delete", ["--id", doc_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         # SLIDES TOOLS
         elif name == "slides_create":
             title = arguments["title"]
-            result = run_gogcli_with_expect("slides", "create", ["--title", title], account)
+            result = run_gogcli("slides", "create", ["--title", title], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "slides_read":
             pres_id = arguments["presentation_id"]
-            result = run_gogcli_with_expect("slides", "get", ["--id", pres_id], account)
+            result = run_gogcli("slides", "get", ["--id", pres_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "slides_delete":
             pres_id = arguments["presentation_id"]
-            result = run_gogcli_with_expect("slides", "delete", ["--id", pres_id], account)
+            result = run_gogcli("slides", "delete", ["--id", pres_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         # CALENDAR TOOLS
@@ -816,7 +864,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             if arguments.get("attendees"):
                 args.extend(["--attendees", arguments["attendees"]])
 
-            result = run_gogcli_with_expect("calendar", "create", args, account)
+            result = run_gogcli("calendar", "create", args, account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "calendar_list_events":
@@ -830,12 +878,12 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             if end:
                 args.extend(["--end", end])
 
-            result = run_gogcli_with_expect("calendar", "list", args, account)
+            result = run_gogcli("calendar", "list", args, account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "calendar_delete_event":
             event_id = arguments["event_id"]
-            result = run_gogcli_with_expect("calendar", "delete", ["--id", event_id], account)
+            result = run_gogcli("calendar", "delete", ["--id", event_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         elif name == "calendar_update_event":
@@ -853,7 +901,87 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             if arguments.get("location"):
                 args.extend(["--location", arguments["location"]])
 
-            result = run_gogcli_with_expect("calendar", "update", args, account)
+            result = run_gogcli("calendar", "update", args, account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        # DRIVE TOOLS
+        elif name == "drive_list_files":
+            folder_id = arguments.get("folder_id", "")
+            args = []
+            if folder_id:
+                args.extend([f"--parent={folder_id}"])
+            result = run_gogcli("drive", "ls", args, account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_search":
+            query = arguments["query"]
+            result = run_gogcli("drive", "search", [query], account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_get_file":
+            file_id = arguments["file_id"]
+            result = run_gogcli("drive", "get", [file_id], account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_download":
+            file_id = arguments["file_id"]
+            output = arguments.get("output", "")
+            args = [file_id]
+            if output:
+                args.extend(["--output", output])
+            result = run_gogcli("drive", "download", args, account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_upload":
+            file_path = arguments["file_path"]
+            folder_id = arguments.get("folder_id", "")
+            args = [file_path]
+            if folder_id:
+                args.extend([f"--folder={folder_id}"])
+            result = run_gogcli("drive", "upload", args, account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_mkdir":
+            name = arguments["name"]
+            folder_id = arguments.get("folder_id", "")
+            args = [name]
+            if folder_id:
+                args.extend([f"--folder={folder_id}"])
+            result = run_gogcli("drive", "mkdir", args, account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_delete":
+            file_id = arguments["file_id"]
+            result = run_gogcli("drive", "delete", [file_id], account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_move":
+            file_id = arguments["file_id"]
+            folder_id = arguments["folder_id"]
+            result = run_gogcli("drive", "move", [file_id, f"--folder={folder_id}"], account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_rename":
+            file_id = arguments["file_id"]
+            new_name = arguments["new_name"]
+            result = run_gogcli("drive", "rename", [file_id, new_name], account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_share":
+            file_id = arguments["file_id"]
+            email = arguments["email"]
+            role = arguments.get("role", "reader")
+            result = run_gogcli("drive", "share", [file_id, "--email", email, "--role", role], account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_permissions":
+            file_id = arguments["file_id"]
+            result = run_gogcli("drive", "permissions", [file_id], account)
+            return [TextContent(type="text", text=result.get("output", result["error"]))]
+
+        elif name == "drive_url":
+            file_id = arguments["file_id"]
+            result = run_gogcli("drive", "url", [file_id], account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
 
         else:
@@ -901,7 +1029,7 @@ def main_server_only(port: int = DEFAULT_PORT, detach: bool = False):
                 response = JSONResponse({
                     "status": "ok",
                     "server": "google-workspace-gogcli-server",
-                    "version": "0.2.0",
+                    "version": "0.3.0",
                     "gogcli": "ok" if gogcli_ok else "error",
                     "auth": auth_status,
                     "account": DEFAULT_ACCOUNT or "default"
@@ -916,7 +1044,7 @@ def main_server_only(port: int = DEFAULT_PORT, detach: bool = False):
                         streams[1],
                         InitializationOptions(
                             server_name="google-workspace-gogcli-server",
-                            server_version="0.2.0",
+                            server_version="0.3.0",
                             capabilities=server.get_capabilities(
                                 notification_options=NotificationOptions(),
                                 experimental_capabilities={},
@@ -926,6 +1054,18 @@ def main_server_only(port: int = DEFAULT_PORT, detach: bool = False):
 
             elif path == "/messages" and scope["method"] == "POST":
                 # POST endpoint for SSE messages
+                # Allow tools/list without session_id for compatibility
+                try:
+                    body = await receive()
+                    data = json.loads(body.get("body", b"").decode())
+                    if data.get("method") == "tools/list":
+                        from starlette.responses import JSONResponse
+                        tools = await handle_list_tools()
+                        response = JSONResponse({"jsonrpc": "2.0", "id": data.get("id", 1), "result": {"tools": tools}})
+                        await response(scope, receive, send)
+                        return
+                except:
+                    pass
                 await sse_transport.handle_post_message(scope, receive, send)
 
             else:
@@ -959,7 +1099,7 @@ def main_server_only(port: int = DEFAULT_PORT, detach: bool = False):
     print(f"\n🚀 Google Workspace MCP Server (gogcli backend)")
     print(f"📡 Server running on http://localhost:{port}/sse")
     print(f"📧 Using gogcli with account: {DEFAULT_ACCOUNT or 'default'}")
-    print(f"🔧 HTML email support: FIXED (using --body-html with expect)")
+    print(f"🔧 Direct execution (no keyring/expect)")
 
     if detach:
         # Run in background (detached mode)
