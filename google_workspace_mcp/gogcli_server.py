@@ -1053,20 +1053,12 @@ def main_server_only(port: int = DEFAULT_PORT, detach: bool = False):
                     )
 
             elif path == "/messages" and scope["method"] == "POST":
-                # POST endpoint for SSE messages
-                # Allow tools/list without session_id for compatibility
+                # POST endpoint for SSE messages - delegate to transport
                 try:
-                    body = await receive()
-                    data = json.loads(body.get("body", b"").decode())
-                    if data.get("method") == "tools/list":
-                        from starlette.responses import JSONResponse
-                        tools = await handle_list_tools()
-                        response = JSONResponse({"jsonrpc": "2.0", "id": data.get("id", 1), "result": {"tools": tools}})
-                        await response(scope, receive, send)
-                        return
-                except:
+                    await sse_transport.handle_post_message(scope, receive, send)
+                except Exception:
+                    # Silently handle client disconnects and other errors
                     pass
-                await sse_transport.handle_post_message(scope, receive, send)
 
             else:
                 # 404
