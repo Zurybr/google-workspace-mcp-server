@@ -517,7 +517,7 @@ async def handle_list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "folder_id": {"type": "string", "description": "Folder ID (default: root)"},
+                    "parent_id": {"type": "string", "description": "Parent folder ID (default: root)"},
                     "account": {"type": "string", "description": "Google account to use"},
                 },
             },
@@ -968,10 +968,10 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
 
         # DRIVE TOOLS
         elif name == "drive_list_files":
-            folder_id = arguments.get("folder_id", "")
+            parent_id = arguments.get("parent_id", "")
             args = []
-            if folder_id:
-                args.extend(["--parent", folder_id])
+            if parent_id:
+                args.extend(["--parent", parent_id])
             args.append("--json")  # Always return JSON for better parsing
             result = run_gogcli("drive", "ls", args, account)
             return [TextContent(type="text", text=result.get("output", result["error"]))]
